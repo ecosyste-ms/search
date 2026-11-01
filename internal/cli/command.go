@@ -1,14 +1,20 @@
 package cli
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/ecosyste-ms/search/internal/search"
 	"github.com/ecosyste-ms/search/internal/snapshot"
+	"github.com/ecosyste-ms/search/internal/telemetry"
 	"github.com/ecosyste-ms/search/internal/web"
 )
 
@@ -37,7 +43,20 @@ func Run(args []string, out io.Writer) error {
 		return err
 	}
 	defer func() { _ = e.Close() }()
+	shutdownTelemetry, err := telemetry.Start(context.Background(), telemetry.ConfigFromEnv())
+	if err != nil {
+		slog.Warn("AppSignal disabled", "error", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancel()
+		if err := shutdownTelemetry(ctx); err != nil {
+			slog.Warn("failed to shut down AppSignal", "error", err)
+		}
+	}()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 	_, _ = fmt.Fprintf(out, "Project search: http://%s/\n", *addr)
 	server := &http.Server{Addr: *addr, Handler: web.Handler(e), ReadHeaderTimeout: 5 * time.Second}
-	return server.ListenAndServe()
+	return serve(ctx, server)
 }

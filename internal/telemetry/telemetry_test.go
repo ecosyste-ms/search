@@ -1,0 +1,357 @@
+package telemetry
+
+import (
+	"context"
+	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	collectortrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
+	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
+	"google.golang.org/protobuf/proto"
+)
+
+const (
+	testAppName  = "Search"
+	testEndpoint = "https://collector.example.com"
+	testHostname = "search-1"
+	testPushKey  = "push-key"
+	testRevision = "abc123"
+)
+
+func TestConfigFromEnv(t *testing.T) {
+	t.Setenv("APPSIGNAL_APP_NAME", testAppName)
+	t.Setenv("APPSIGNAL_APP_ENV", "staging")
+	t.Setenv("APPSIGNAL_COLLECTOR_ENDPOINT", testEndpoint)
+	t.Setenv("APPSIGNAL_PUSH_API_KEY", testPushKey)
+	t.Setenv("APP_REVISION", testRevision)
+	t.Setenv("GIT_REV", "fallback-revision")
+
+	config := ConfigFromEnv()
+
+	if config.AppName != testAppName {
+		t.Errorf("AppName = %q, want Search", config.AppName)
+	}
+	if config.Environment != "staging" {
+		t.Errorf("Environment = %q, want staging", config.Environment)
+	}
+	if config.Endpoint != testEndpoint {
+		t.Errorf("Endpoint = %q, want hosted collector endpoint", config.Endpoint)
+	}
+	if config.PushAPIKey != testPushKey {
+		t.Errorf("PushAPIKey = %q, want configured key", config.PushAPIKey)
+	}
+	if config.Revision != testRevision {
+		t.Errorf("Revision = %q, want abc123", config.Revision)
+	}
+	if config.ServiceName != defaultServiceName {
+		t.Errorf("ServiceName = %q, want web", config.ServiceName)
+	}
+}
+
+func TestConfigFromEnvUsesGitRevision(t *testing.T) {
+	t.Setenv("APP_REVISION", "")
+	t.Setenv("GIT_REV", testRevision)
+
+	config := ConfigFromEnv()
+
+	if config.Revision != testRevision {
+		t.Errorf("Revision = %q, want %q", config.Revision, testRevision)
+	}
+}
+
+func TestConfigFromEnvDefaults(t *testing.T) {
+	t.Setenv("APPSIGNAL_APP_ENV", "")
+	t.Setenv("APP_ENV", "")
+	t.Setenv("APP_REVISION", "")
+	t.Setenv("GIT_REV", "")
+
+	config := ConfigFromEnv()
+
+	if config.Environment != defaultEnvironment {
+		t.Errorf("Environment = %q, want production", config.Environment)
+	}
+	if config.Revision != "unknown" {
+		t.Errorf("Revision = %q, want unknown", config.Revision)
+	}
+}
+
+func TestStartExportsHTTPErrorToCollectorTracePath(t *testing.T) {
+	exports := make(chan *collectortrace.ExportTraceServiceRequest, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != collectorTracePath {
+			t.Errorf("export path = %q, want %s", r.URL.Path, collectorTracePath)
+		}
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Error(err)
+			http.Error(w, "read export", http.StatusBadRequest)
+			return
+		}
+		var export collectortrace.ExportTraceServiceRequest
+		if err := proto.Unmarshal(body, &export); err != nil {
+			t.Error(err)
+			http.Error(w, "decode export", http.StatusBadRequest)
+			return
+		}
+		exports <- &export
+		w.Header().Set("Content-Type", "application/x-protobuf")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	previousProvider := otel.GetTracerProvider()
+	previousPropagator := otel.GetTextMapPropagator()
+	t.Cleanup(func() {
+		otel.SetTracerProvider(previousProvider)
+		otel.SetTextMapPropagator(previousPropagator)
+	})
+
+	shutdown, err := Start(context.Background(), Config{
+		AppName:     testAppName,
+		AppPath:     defaultAppPath,
+		Environment: defaultEnvironment,
+		Endpoint:    server.URL,
+		Hostname:    testHostname,
+		PushAPIKey:  testPushKey,
+		Revision:    testRevision,
+		ServiceName: defaultServiceName,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	handler := HTTPHandler("GET /archive", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		RecordError(r.Context(), errors.New("archive failed"))
+		http.Error(w, "failed", http.StatusInternalServerError)
+	}))
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/archive?token=secret", nil))
+	if err := shutdown(context.Background()); err != nil {
+		t.Fatalf("shutdown tracer provider: %v", err)
+	}
+
+	select {
+	case export := <-exports:
+		assertExportedHTTPError(t, export)
+	default:
+		t.Fatal("collector did not receive a trace export")
+	}
+}
+
+func assertExportedHTTPError(t *testing.T, export *collectortrace.ExportTraceServiceRequest) {
+	t.Helper()
+	if len(export.ResourceSpans) != 1 || len(export.ResourceSpans[0].ScopeSpans) != 1 {
+		t.Fatalf("unexpected trace export: %v", export)
+	}
+	spans := export.ResourceSpans[0].ScopeSpans[0].Spans
+	if len(spans) != 1 {
+		t.Fatalf("exported %d spans, want 1", len(spans))
+	}
+	span := spans[0]
+	if span.Name != "GET /archive" || span.Kind != tracepb.Span_SPAN_KIND_SERVER {
+		t.Errorf("unexpected server span: %v", span)
+	}
+	if span.Status.GetCode() != tracepb.Status_STATUS_CODE_ERROR {
+		t.Errorf("exported status = %v, want error", span.Status)
+	}
+	if len(span.Events) != 1 || span.Events[0].Name != "exception" {
+		t.Errorf("exported events = %v, want exception event", span.Events)
+	}
+	for _, attr := range span.Attributes {
+		if attr.Key == "url.query" || strings.Contains(attr.Value.GetStringValue(), "token=secret") {
+			t.Errorf("exported request query string: %v", attr)
+		}
+	}
+}
+
+func TestStartValidatesPartialConfiguration(t *testing.T) {
+	tests := []struct {
+		name   string
+		config Config
+		want   string
+	}{
+		{
+			name:   "missing push API key",
+			config: Config{Endpoint: testEndpoint},
+			want:   "APPSIGNAL_PUSH_API_KEY is required",
+		},
+		{
+			name:   "app name only",
+			config: Config{AppName: testAppName},
+			want:   "APPSIGNAL_PUSH_API_KEY is required",
+		},
+		{
+			name:   "missing collector endpoint",
+			config: Config{PushAPIKey: testPushKey},
+			want:   "APPSIGNAL_COLLECTOR_ENDPOINT is required",
+		},
+		{
+			name: "missing app name",
+			config: Config{
+				Endpoint:   testEndpoint,
+				PushAPIKey: testPushKey,
+			},
+			want: "APPSIGNAL_APP_NAME is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Start(context.Background(), tt.config)
+			if err == nil || err.Error() != tt.want {
+				t.Fatalf("Start() error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestStartWithoutConfiguration(t *testing.T) {
+	provider := otel.GetTracerProvider()
+	shutdown, err := Start(context.Background(), Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if otel.GetTracerProvider() != provider {
+		t.Fatal("disabled monitoring replaced the tracer provider")
+	}
+	if err := shutdown(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestHTTPHandlerRecordsPanic(t *testing.T) {
+	exporter := setupTracing(t)
+	for _, value := range []any{"unexpected failure", http.ErrAbortHandler} {
+		handler := HTTPHandler("GET /", http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+			panic(value)
+		}))
+		func() {
+			defer func() {
+				if got := recover(); got != value {
+					t.Errorf("panic = %v, want %v", got, value)
+				}
+			}()
+			handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+		}()
+	}
+	spans := exporter.GetSpans()
+	if len(spans) != 2 || len(spans[0].Events) != 1 || len(spans[1].Events) != 0 {
+		t.Fatalf("panic spans: %+v", spans)
+	}
+	stack, ok := attributeValue(spans[0].Events[0].Attributes, "exception.stacktrace")
+	if !ok || !strings.Contains(stack.AsString(), "TestHTTPHandlerRecordsPanic") {
+		t.Fatal("panic stack trace missing")
+	}
+}
+
+func TestResourceForAppSignal(t *testing.T) {
+	appResource, err := resourceFor(Config{
+		AppName:     testAppName,
+		AppPath:     defaultAppPath,
+		Environment: defaultEnvironment,
+		Hostname:    testHostname,
+		PushAPIKey:  testPushKey,
+		Revision:    testRevision,
+		ServiceName: defaultServiceName,
+	})
+	if err != nil {
+		t.Fatalf("resourceFor() error: %v", err)
+	}
+
+	wants := map[attribute.Key]string{
+		"appsignal.config.name":                 testAppName,
+		"appsignal.config.environment":          defaultEnvironment,
+		"appsignal.config.push_api_key":         testPushKey,
+		"appsignal.config.revision":             testRevision,
+		"appsignal.config.language_integration": "go",
+		"appsignal.config.app_path":             defaultAppPath,
+		"service.name":                          defaultServiceName,
+		"host.name":                             testHostname,
+	}
+	for key, want := range wants {
+		value, ok := appResource.Set().Value(key)
+		if !ok || value.AsString() != want {
+			t.Errorf("resource attribute %q = %q, want %q", key, value.AsString(), want)
+		}
+	}
+}
+
+func TestHTTPHandlerRecordsRouteAndErrorWithoutQueryString(t *testing.T) {
+	exporter := setupTracing(t)
+
+	var query string
+	handler := HTTPHandler("GET /archive", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		query = r.URL.RawQuery
+		RecordError(r.Context(), errors.New("archive failed"))
+		http.Error(w, "failed", http.StatusInternalServerError)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "https://search.example.com/archive?url=https%3A%2F%2Fexample.com%2Fpackage.tgz", nil)
+	handler.ServeHTTP(httptest.NewRecorder(), req)
+
+	if query == "" {
+		t.Fatal("wrapped handler did not receive the request query string")
+	}
+
+	spans := exporter.GetSpans()
+	if len(spans) != 1 {
+		t.Fatalf("recorded %d spans, want 1", len(spans))
+	}
+	span := spans[0]
+	if span.Name != "GET /archive" {
+		t.Errorf("span name = %q, want GET /archive", span.Name)
+	}
+	if span.Status.Code != codes.Error {
+		t.Errorf("span status = %v, want error", span.Status.Code)
+	}
+	if value, ok := attributeValue(span.Attributes, "http.route"); !ok || value.AsString() != "/archive" {
+		t.Errorf("http.route = %q, want /archive", value.AsString())
+	}
+	if _, ok := attributeValue(span.Attributes, "url.query"); ok {
+		t.Error("span contains the request query string")
+	}
+
+	foundException := false
+	for _, event := range span.Events {
+		if event.Name == "exception" {
+			foundException = true
+			break
+		}
+	}
+	if !foundException {
+		t.Error("span does not contain an exception event")
+	}
+}
+
+func setupTracing(t *testing.T) *tracetest.InMemoryExporter {
+	t.Helper()
+
+	exporter := tracetest.NewInMemoryExporter()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+	previousProvider := otel.GetTracerProvider()
+	otel.SetTracerProvider(provider)
+	t.Cleanup(func() {
+		otel.SetTracerProvider(previousProvider)
+		if err := provider.Shutdown(context.Background()); err != nil {
+			t.Errorf("shut down tracer provider: %v", err)
+		}
+	})
+	return exporter
+}
+
+func attributeValue(attributes []attribute.KeyValue, key attribute.Key) (attribute.Value, bool) {
+	for _, item := range attributes {
+		if item.Key == key {
+			return item.Value, true
+		}
+	}
+	return attribute.Value{}, false
+}

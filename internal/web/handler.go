@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/ecosyste-ms/search/internal/search"
+	"github.com/ecosyste-ms/search/internal/telemetry"
 )
 
 //go:embed assets/*
@@ -24,8 +25,8 @@ func Handler(e *search.Engine) http.Handler {
 	})
 	assets, _ := fs.Sub(discoveryAssets, "assets")
 	mux.Handle("GET /", http.FileServer(http.FS(assets)))
-	mux.HandleFunc("GET /{$}", pages.searchPage)
-	mux.HandleFunc("GET /project/{id}", pages.projectPage)
-	mux.HandleFunc("GET /api/v1/search", pages.searchJSON)
+	mux.Handle("GET /{$}", telemetry.HTTPHandler("GET /{$}", http.HandlerFunc(pages.searchPage)))
+	mux.Handle("GET /project/{id}", telemetry.HTTPHandler("GET /project/{id}", http.HandlerFunc(pages.projectPage)))
+	mux.Handle("GET /api/v1/search", telemetry.HTTPHandler("GET /api/v1/search", http.HandlerFunc(pages.searchJSON)))
 	return mux
 }

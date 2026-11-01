@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+
+	"github.com/ecosyste-ms/search/internal/telemetry"
 )
 
 func (e *webServer) health(w http.ResponseWriter, r *http.Request) {
@@ -48,10 +50,12 @@ func (e *webServer) searchJSON(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := e.Search(r.Context(), q, ecosystem, suggestions, display)
 	if err != nil {
+		telemetry.RecordError(r.Context(), err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	if err := e.AttachPublicDetails(result.Hits); err != nil {
+		telemetry.RecordError(r.Context(), err)
 		http.Error(w, "Unable to read project details", http.StatusInternalServerError)
 		return
 	}

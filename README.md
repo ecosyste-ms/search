@@ -125,6 +125,10 @@ That check compares API responses and HTML as well as rankings. The code is spli
 
 The Docker image contains the application and web assets; snapshots are mounted read-only. For data updates, the host downloads and validates the publisher archive, builds a snapshot, switches the active directory and restarts the server. The previous snapshot is retained for rollback. Application deployments are separate from data updates. See the [Docker and Dokku deployment guide](docs/deployment.md).
 
+AppSignal monitoring uses OpenTelemetry. Set `APPSIGNAL_APP_NAME`, `APPSIGNAL_PUSH_API_KEY` and `APPSIGNAL_COLLECTOR_ENDPOINT` to enable it. `APPSIGNAL_APP_ENV` defaults to `production`; the deployment revision comes from `APP_REVISION` or Dokku's `GIT_REV`. With none of the three required settings present, monitoring is disabled. Incomplete configuration logs a warning and the server continues without monitoring.
+
+HTML and API requests report timings, internal errors and panics. Query strings are excluded from request attributes; health checks and static assets are not traced. Reports are sent in the background and flushed on shutdown. No monitoring agent or writable volume is required in the application container.
+
 ## License
 
 Licensed under the [GNU Affero General Public License v3.0](LICENSE).

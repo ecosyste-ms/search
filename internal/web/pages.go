@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ecosyste-ms/search/internal/search"
+	"github.com/ecosyste-ms/search/internal/telemetry"
 )
 
 var discoveryTemplates = template.Must(template.New("").Funcs(template.FuncMap{"join": strings.Join}).ParseFS(discoveryAssets, "assets/*.html"))
@@ -28,9 +29,10 @@ type htmlPage struct {
 	Public                           map[string]any
 }
 
-func renderDiscovery(w http.ResponseWriter, name string, data htmlPage) {
+func renderDiscovery(w http.ResponseWriter, r *http.Request, name string, data htmlPage) {
 	var body bytes.Buffer
 	if err := discoveryTemplates.ExecuteTemplate(&body, name, data); err != nil {
+		telemetry.RecordError(r.Context(), err)
 		http.Error(w, "Unable to render page", http.StatusInternalServerError)
 		return
 	}
@@ -48,6 +50,7 @@ func (e *webServer) searchPage(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		found, err := e.Search(r.Context(), page.Query, "", true, 100)
 		if err != nil {
+			telemetry.RecordError(r.Context(), err)
 			http.Error(w, "Unable to search", http.StatusInternalServerError)
 			return
 		}
@@ -66,7 +69,7 @@ func (e *webServer) searchPage(w http.ResponseWriter, r *http.Request) {
 			page.Status = "No matching projects."
 		}
 	}
-	renderDiscovery(w, "index.html", page)
+	renderDiscovery(w, r, "index.html", page)
 }
 
 func (e *webServer) projectPage(w http.ResponseWriter, r *http.Request) {
@@ -77,11 +80,13 @@ func (e *webServer) projectPage(w http.ResponseWriter, r *http.Request) {
 	}
 	description, err := e.Description(r.Context(), ordinal)
 	if err != nil {
+		telemetry.RecordError(r.Context(), err)
 		http.Error(w, "Unable to read description", http.StatusInternalServerError)
 		return
 	}
 	p, err := e.PublicProject(ordinal)
 	if err != nil {
+		telemetry.RecordError(r.Context(), err)
 		http.Error(w, "Unable to read identifiers", http.StatusInternalServerError)
 		return
 	}
@@ -93,5 +98,5 @@ func (e *webServer) projectPage(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("fragment") == "identities" {
 		name = "identities"
 	}
-	renderDiscovery(w, name, page)
+	renderDiscovery(w, r, name, page)
 }
