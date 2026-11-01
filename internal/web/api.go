@@ -9,10 +9,12 @@ import (
 )
 
 func (e *webServer) health(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok", "projects": e.Count, "snapshot": e.Snapshot})
 }
 func (e *webServer) searchJSON(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	values := r.URL.Query()
 	q := strings.TrimSpace(values.Get("q"))
 	if q == "" || len(q) > 500 {
@@ -60,5 +62,6 @@ func (e *webServer) searchJSON(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", searchCacheControl)
 	_ = json.NewEncoder(w).Encode(result)
 }

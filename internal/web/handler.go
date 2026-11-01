@@ -15,6 +15,8 @@ var discoveryAssets embed.FS
 //go:embed openapi.yml
 var openAPISpec []byte
 
+const searchCacheControl = "public, max-age=3600, s-maxage=3600"
+
 func Handler(e *search.Engine) http.Handler {
 	mux := http.NewServeMux()
 	pages := &webServer{e}

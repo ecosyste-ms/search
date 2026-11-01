@@ -77,6 +77,8 @@ Ecosystem filtering happens before selecting candidates and does not add to rele
 
 Each search hit contains its name, description, scores and public identity data. The `public` object includes every package membership, PURL, package/repository link and bulk lookup request body. No separate detail lookup is required. `/api/v1/health` is retained for deployment checks.
 
+Successful search responses and HTML pages allow browser and shared caching for one hour. Search errors and health checks use `Cache-Control: no-store`. Cache keys must include the full query string, including filters and result limits. Cached responses can show the previous snapshot until they expire.
+
 An abbreviated hit from a search for `@types/node`:
 
 ```json

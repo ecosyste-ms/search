@@ -64,6 +64,12 @@ paths:
       responses:
         '200':
           description: Ranked projects, possibly empty.
+          headers:
+            Cache-Control:
+              description: Successful responses allow browser and shared caching for one hour. Cache keys must include the full query string.
+              schema:
+                type: string
+                const: public, max-age=3600, s-maxage=3600
           content:
             application/json:
               schema:
@@ -79,6 +85,11 @@ paths:
       responses:
         '200':
           description: Service status and snapshot provenance.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
           content:
             application/json:
               schema:

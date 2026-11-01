@@ -37,10 +37,12 @@ func renderDiscovery(w http.ResponseWriter, r *http.Request, name string, data h
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", searchCacheControl)
 	_, _ = w.Write(body.Bytes())
 }
 
 func (e *webServer) searchPage(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	page := htmlPage{Query: strings.TrimSpace(r.URL.Query().Get("q")), Status: "Enter a query and press Search."}
 	if len(page.Query) > 500 {
 		http.Error(w, "query must contain at most 500 bytes", http.StatusBadRequest)
@@ -73,6 +75,7 @@ func (e *webServer) searchPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (e *webServer) projectPage(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	ordinal, err := e.Ordinal(r.PathValue("id"))
 	if err != nil {
 		http.NotFound(w, r)
