@@ -1,0 +1,12 @@
+{{template "header" .}}
+    <p><a href="/">Search</a></p>
+    <h1>{{.Name}}</h1>
+    <p>{{.Description}}</p>
+    <div class="identity-list">{{template "identities" .}}</div>
+{{template "footer" .}}
+{{define "identities"}}
+{{with .Public}}
+  {{range .packages}}<p><a href="{{.URL}}">{{.Ecosystem}} · {{.Registry}} · {{.Name}}</a>{{if .PURL}}<code>{{.PURL}}</code>{{end}}{{if and .DeclaredRepository (not .Verified)}}<small>Unverified repository declaration: {{.DeclaredRepository}}</small>{{end}}</p>{{end}}
+  {{range .repositories}}<p><a href="{{.page_url}}">{{.url}}</a></p>{{end}}
+{{else}}<p>No public identifiers available.</p>{{end}}
+{{end}}

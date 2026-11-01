@@ -1,0 +1,44 @@
+{{define "header"}}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Project search · ecosyste.ms</title>
+  <link rel="preload" href="/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/search.js" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="site-header-inner">
+      <a class="site-logo" href="https://ecosyste.ms/"><img src="/ecosystems-logo.svg" alt="ecosyste.ms" width="155" height="30"></a>
+      <span class="service-name">Project search</span>
+      <nav class="header-links" aria-label="Project links">
+        <a href="/openapi.yml" aria-label="API specification">API</a>
+        <a href="https://github.com/ecosyste-ms/search">GitHub</a>
+      </nav>
+    </div>
+  </header>
+  <main>
+{{end}}{{template "header" .}}
+    <form id="search-form" role="search" method="get" action="/">
+      <div class="searchbox"><input id="query" name="q" value="{{.Query}}" type="search" aria-label="Search projects" maxlength="500" placeholder="Search popular packages by name or description" autocomplete="off"><button type="submit">Search</button></div>
+    </form>
+    <div class="search-meta">
+      <p id="status" role="status">{{.Status}}</p>
+      {{if .Suggestions}}<details id="suggestions">
+        <summary>Categories</summary>
+        <div class="suggestions-panel"><p>Categories from the top 100 candidates only. Other matching projects may have different categories.</p><dl id="categories">{{range $field, $values := .Suggestions}}{{if $values}}<dt>{{$field}}</dt><dd>{{join $values ", "}}</dd>{{end}}{{end}}</dl></div>
+      </details>{{end}}
+    </div>
+    <ol id="results">{{range .Hits}}
+      <li><a href="{{.URL}}" title="{{.Name}}">{{.Name}}</a>
+        {{with .Identity}}<p class="package-identity" title="{{.PURL}}">{{.Label}}</p>{{end}}
+        <p class="description">{{.Description}}</p><span class="score" hidden>Score {{.Score}}</span>
+        {{if .Identity}}<details class="identities" data-url="{{.DetailsURL}}?fragment=identities"><summary>Packages and repositories</summary><div class="identity-list"><a href="{{.DetailsURL}}">View packages and repositories</a></div></details>{{end}}
+      </li>{{end}}</ol>
+{{template "footer" .}}{{define "footer"}}
+  </main>
+</body>
+</html>
+{{end}}

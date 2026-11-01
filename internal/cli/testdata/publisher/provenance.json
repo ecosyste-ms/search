@@ -1,0 +1,15 @@
+{
+  "publisher": "https://github.com/ecosyste-ms/packages/pull/1938",
+  "source_files": {
+    "lib/corpus/export.rb": "2b120e62c48d07d2ae3851911f7afc88978de5d0f9640e0544b6fa2915d1497c",
+    "lib/corpus/selection.rb": "af72cbd0ade06b096f0a9745c7f11faedc1c7612d024bcf114e85b0cd88719ec",
+    "lib/corpus/projects.rb": "105a707144c64620a4913da7ea9d7f9c8017eb7ecf82c196d12d393b6eac1700",
+    "lib/corpus/identity.rb": "9164a4205f6fd32c0746c05fd6fc8e36689226a8ae5e70273534ff2bb83f2ee8",
+    "lib/corpus/database.rb": "c342c3c349e622f3f338ae3f074110cc40be5afd39c23fec419c004f2a40b4c8"
+  },
+  "fixtures": {
+    "replay.tar.gz": "e695bb7d9defaa86b7fc63e1acd898a069a4c4104ebbf13c2045f9dc3ef3daaa",
+    "database.tar.gz": "e8c9e748c10cab8ff82678e0f95b2d09dc4758ed2586e58d549da2e5b647dd25"
+  },
+  "generation": "generate.rb uses Corpus::Export; database access is replaced with one synthetic package. No database or Rails application is loaded."
+}

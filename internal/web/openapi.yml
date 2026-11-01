@@ -1,0 +1,351 @@
+openapi: 3.1.0
+info:
+  title: ecosyste.ms project search
+  version: v1
+  description: |
+    Search an immutable project snapshot. IDs identify projects within that snapshot;
+    use returned PURLs and public package/repository links for external lookups.
+    Search returns at most 100 results, without pagination or total hit counts.
+servers:
+  - url: /api/v1
+paths:
+  /search:
+    get:
+      operationId: searchProjects
+      summary: Search project names and descriptions
+      description: |
+        Returns ranked results with descriptions, package identities and public links.
+        The limit counts projects, not package identities. Each hit includes every
+        package membership and bulk lookup request, so responses can be large.
+        Category suggestions come from the top 100 candidates,
+        not every matching project. Unknown query parameters are rejected.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Search text, 1 to 500 UTF-8 bytes after trimming whitespace.
+          schema:
+            type: string
+            minLength: 1
+            x-max-utf8-bytes: 500
+          example: '@babel/core'
+        - name: ecosystem
+          in: query
+          description: |
+            Restrict projects to one ecosystem, such as npm, pypi or rubygems.
+            Case-insensitive; surrounding whitespace is ignored. Omitted or empty
+            means all ecosystems. At most 100 UTF-8 bytes after trimming.
+            Unknown values return no results. Applied before
+            selecting the top 100 candidates, without adding to relevance scores.
+            Multi-ecosystem projects retain all public identifiers, and their
+            category suggestions can include other ecosystems. Repeated values
+            are rejected.
+          schema:
+            type: string
+            x-max-utf8-bytes: 100
+          example: pypi
+        - name: limit
+          in: query
+          description: Maximum projects returned. Does not limit package memberships or bulk lookup requests within a project.
+          schema:
+            type: integer
+            enum: [10, 100]
+            default: 10
+        - name: suggestions
+          in: query
+          description: |
+            Include category suggestions from up to 100 candidates after ecosystem
+            filtering, even when limit=10. When false, both suggestions and
+            suggestions_partial are omitted. When true or omitted, both fields
+            are present, including for an empty result set.
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: Ranked projects, possibly empty.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /health:
+    get:
+      operationId: getHealth
+      summary: Inspect the loaded snapshot
+      responses:
+        '200':
+          description: Service status and snapshot provenance.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, projects, snapshot]
+                properties:
+                  status:
+                    type: string
+                    const: ok
+                  projects:
+                    type: integer
+                    minimum: 0
+                  snapshot:
+                    description: Provenance metadata, or null for a loaded bundle without snapshot metadata. Null does not mean no index is loaded.
+                    anyOf:
+                      - $ref: '#/components/schemas/Snapshot'
+                      - type: 'null'
+components:
+  responses:
+    BadRequest:
+      description: Missing or invalid query, or unsupported search parameter.
+      content:
+        text/plain:
+          schema:
+            type: string
+    ServerError:
+      description: Search or snapshot read failed.
+      content:
+        text/plain:
+          schema:
+            type: string
+  schemas:
+    SearchResponse:
+      type: object
+      required: [hits]
+      dependentRequired:
+        suggestions: [suggestions_partial]
+        suggestions_partial: [suggestions]
+      properties:
+        hits:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/Hit'
+        suggestions:
+          type: object
+          description: |
+            Present when suggestions is enabled; omitted when disabled. Contains
+            all four category keys, with empty arrays when no candidates match.
+            Values describe up to 100 candidates after ecosystem filtering, not
+            an exhaustive facet calculation. Includes all ecosystem memberships
+            of those projects. No counts are calculated.
+          required: [ecosystem, language, license, activity]
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          propertyNames:
+            enum: [ecosystem, language, license, activity]
+        suggestions_partial:
+          type: boolean
+          const: true
+          description: Present and true whenever suggestions is enabled, even for zero hits. Omitted when disabled; true describes candidate-based scope, not whether results were actually truncated.
+    Hit:
+      type: object
+      required: [id, name, description, lexical, score]
+      properties:
+        id:
+          type: string
+          description: |
+            Snapshot-local project ID; may change between daily builds when project
+            assignments change. Use PURLs or registry/package identifiers for
+            references across snapshots. There is no /api/v1/entities/{id} lookup;
+            all public package and repository details are included in this hit.
+        name:
+          type: string
+        description:
+          type: string
+          description: Short project description from the serving catalogue, also used in HTML results.
+        lexical:
+          type: number
+          description: |
+            Bleve BM25 score for the configured text query, including field and
+            exact-name boosts. Not normalised and not comparable across queries
+            or snapshots.
+        score:
+          type: number
+          description: |
+            Currently equal to lexical; no popularity score is added. Provided
+            for debugging, not comparable across queries or snapshots. Exact-name
+            precedence can override score order; use the returned hit order.
+        identity:
+          type: object
+          required: [label, package_count]
+          properties:
+            label:
+              type: string
+            url:
+              type: string
+              format: uri
+              description: |
+                Preferred public page: the ecosyste.ms repository page when there
+                is exactly one verified repository; otherwise the package page
+                when there is exactly one package. Omitted when neither applies.
+                This choice does not identify a canonical package for a
+                multi-package project. All links remain in public.
+            purl:
+              type: string
+              description: Present for a single package with a known PURL.
+            package_count:
+              type: integer
+              minimum: 0
+        public:
+          $ref: '#/components/schemas/PublicDetails'
+    PublicDetails:
+      type: object
+      description: Complete public memberships for this project. Array sizes are not bounded by the search limit.
+      required: [packages, repositories, bulk_lookup_requests, grouping_evidence, source, purl_source_sha256]
+      properties:
+        packages:
+          type: array
+          description: All package memberships, including channel-specific PURLs. Not truncated by the project limit.
+          items:
+            $ref: '#/components/schemas/Package'
+        repositories:
+          type: array
+          items:
+            type: object
+            required: [url, page_url, lookup_url, verification]
+            properties:
+              url:
+                type: string
+                format: uri
+              page_url:
+                type: string
+                format: uri
+              lookup_url:
+                type: string
+                format: uri
+              verification:
+                type: string
+        bulk_lookup_requests:
+          type: array
+          description: POST these bodies to the given ecosyste.ms URLs; verify the returned registries. Each body contains up to 100 PURLs or names; the number of requests per project is not capped by the search limit.
+          items:
+            type: object
+            required: [url, body, verify_registries]
+            properties:
+              url:
+                type: string
+                format: uri
+              body:
+                oneOf:
+                  - type: object
+                    required: [purls]
+                    properties:
+                      purls:
+                        type: array
+                        maxItems: 100
+                        items:
+                          type: string
+                  - type: object
+                    required: [names, ecosystem]
+                    properties:
+                      names:
+                        type: array
+                        maxItems: 100
+                        items:
+                          type: string
+                      ecosystem:
+                        type: string
+              verify_registries:
+                type: array
+                items:
+                  type: string
+        grouping_evidence:
+          type: string
+          description: Upstream assignment reason, such as repository, package, distribution_release or registry_mirror. Describes the supplied grouping, not a confidence score or independent identity verification.
+        source:
+          anyOf:
+            - $ref: '#/components/schemas/Source'
+            - type: 'null'
+        purl_source_sha256:
+          type: string
+          pattern: '^([0-9a-f]{64})?$'
+          description: SHA-256 of the PURL source, encoded as 64 lowercase hexadecimal characters; empty when unavailable.
+    Package:
+      type: object
+      required: [snapshot_id, name, registry, ecosystem, namespace, purl, source_line, url, api_url, repository_verified]
+      properties:
+        snapshot_id:
+          type: integer
+          description: Local join key; use public identifiers for external lookups.
+        name:
+          type: string
+        registry:
+          type: string
+        ecosystem:
+          type: string
+        namespace:
+          type: [string, 'null']
+        purl:
+          type: [string, 'null']
+          description: Service PURL, including channel qualifiers when present; null if unavailable.
+        source_line:
+          type: integer
+        declared_repository:
+          type: string
+          description: Unverified package declaration.
+        cached_repository:
+          type: string
+        url:
+          type: string
+          format: uri
+        api_url:
+          type: string
+          format: uri
+        repository_verified:
+          type: boolean
+          description: Declaration and cached repository metadata agree.
+    Source:
+      type: object
+      description: Source checksums use SHA-256 encoded as 64 lowercase hexadecimal characters. Optional source information may be an empty string when unavailable.
+      required: [sha256]
+      properties:
+        sha256:
+          type: string
+          pattern: '^([0-9a-f]{64})?$'
+        assignments:
+          type: object
+          required: [source_package_sha256, source_corpus_sha256, assignments_sha256, manifest_sha256, packages, projects]
+          properties:
+            source_package_sha256:
+              type: string
+              pattern: '^([0-9a-f]{64})?$'
+            source_corpus_sha256:
+              type: string
+              pattern: '^([0-9a-f]{64})?$'
+            assignments_sha256:
+              type: string
+              pattern: '^([0-9a-f]{64})?$'
+            manifest_sha256:
+              type: string
+              pattern: '^([0-9a-f]{64})?$'
+            packages:
+              type: integer
+            projects:
+              type: integer
+    Snapshot:
+      type: object
+      required: [version, created_at, source_sha256]
+      properties:
+        version:
+          type: string
+          description: Opaque snapshot version, normally the source archive SHA-256 encoded as 64 lowercase hexadecimal characters.
+        created_at:
+          type: string
+          format: date-time
+        source_sha256:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: Source package export SHA-256, encoded as 64 lowercase hexadecimal characters.
+        manifest_sha256:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: Publisher manifest SHA-256, encoded as 64 lowercase hexadecimal characters. Omitted when unavailable.
+        catalogue_sha256:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: Catalogue SHA-256, encoded as 64 lowercase hexadecimal characters. Omitted when unavailable.
