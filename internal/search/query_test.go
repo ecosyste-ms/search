@@ -11,6 +11,12 @@ import (
 	"github.com/blevesearch/bleve/v2"
 )
 
+const expandedExactID = "project:0200"
+const expandedPopularID = "project:0199"
+const expandedExactEcosystem = "hex"
+const expandedCommonEcosystem = "swiftpm"
+const expandedPopularEcosystem = "hackage"
+
 func expandedCandidateFixture(t *testing.T) *Engine {
 	t.Helper()
 	idx, err := bleve.New(filepath.Join(t.TempDir(), "index"), Mapping())
@@ -19,7 +25,7 @@ func expandedCandidateFixture(t *testing.T) *Engine {
 	}
 	t.Cleanup(func() { _ = idx.Close() })
 	e := &Engine{Index: idx, Positions: map[string]uint32{}, Compact: &compactCatalog{}}
-	e.Catalog.Values[0] = [][]string{{"swiftpm"}, {"hex"}, {"hackage"}}
+	e.Catalog.Values[0] = [][]string{{expandedCommonEcosystem}, {expandedExactEcosystem}, {expandedPopularEcosystem}}
 	batch := idx.NewBatch()
 	for i := 0; i < 1201; i++ {
 		id := fmt.Sprintf("project:%04d", i)
@@ -62,7 +68,7 @@ func TestSearchOrdersExpandedCandidatesBeforeLimiting(t *testing.T) {
 	}
 	position := 0
 	for i, h := range raw.Hits {
-		if h.ID == "project:0200" {
+		if h.ID == expandedExactID {
 			position = i + 1
 		}
 	}
@@ -77,10 +83,10 @@ func TestSearchOrdersExpandedCandidatesBeforeLimiting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(large.Hits) != 100 || large.Hits[0].ID != "project:0200" || !reflect.DeepEqual(small.Hits, large.Hits[:10]) {
+	if len(large.Hits) != 100 || large.Hits[0].ID != expandedExactID || !reflect.DeepEqual(small.Hits, large.Hits[:10]) {
 		t.Fatal("exact match or display limit lost")
 	}
-	if !reflect.DeepEqual(large.Suggestions["ecosystem"], []string{"hex", "swiftpm"}) || !reflect.DeepEqual(small.Suggestions, large.Suggestions) {
+	if !reflect.DeepEqual(large.Suggestions["ecosystem"], []string{expandedExactEcosystem, expandedCommonEcosystem}) || !reflect.DeepEqual(small.Suggestions, large.Suggestions) {
 		t.Fatalf("suggestions must describe selected top 100: %v", large.Suggestions)
 	}
 	for _, hit := range large.Hits {
@@ -88,8 +94,8 @@ func TestSearchOrdersExpandedCandidatesBeforeLimiting(t *testing.T) {
 			t.Fatalf("display data or BM25 score lost: %+v", hit)
 		}
 	}
-	filtered, err := e.Search(context.Background(), "needle", "hackage", true, 100)
-	if err != nil || len(filtered.Hits) != 1 || filtered.Hits[0].ID != "project:0199" {
+	filtered, err := e.Search(context.Background(), "needle", expandedPopularEcosystem, true, 100)
+	if err != nil || len(filtered.Hits) != 1 || filtered.Hits[0].ID != expandedPopularID {
 		t.Fatalf("filter must apply before retrieval: %+v, %v", filtered, err)
 	}
 }

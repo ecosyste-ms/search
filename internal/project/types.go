@@ -5,16 +5,21 @@ import (
 )
 
 type Package struct {
-	ID            int        `json:"id"`
-	Name          string     `json:"name"`
-	PURL          string     `json:"purl"`
-	Ecosystem     string     `json:"ecosystem"`
-	Description   string     `json:"description"`
-	RepositoryURL string     `json:"repository_url"`
-	Language      string     `json:"language"`
-	Licenses      []string   `json:"normalized_licenses"`
-	Keywords      []string   `json:"keywords_array"`
-	Repo          Repository `json:"repo_metadata"`
+	ID            int            `json:"id"`
+	Name          string         `json:"name"`
+	PURL          string         `json:"purl"`
+	Ecosystem     string         `json:"ecosystem"`
+	Description   string         `json:"description"`
+	RepositoryURL string         `json:"repository_url"`
+	Language      string         `json:"language"`
+	Licenses      []string       `json:"normalized_licenses"`
+	Keywords      []string       `json:"keywords_array"`
+	Repo          Repository     `json:"repo_metadata"`
+	Signals       PackageSignals `json:"signals"`
+}
+
+type PackageSignals struct {
+	DependentRepos int64 `json:"dependent_repos_count"`
 }
 
 type Repository struct {
@@ -52,9 +57,10 @@ type Project struct {
 }
 
 type Metadata struct {
-	Pushed   string `json:"pushed_at"`
-	Archived bool   `json:"archived"`
-	Activity string `json:"activity"`
+	Pushed                   string  `json:"pushed_at"`
+	Archived                 bool    `json:"archived"`
+	Activity                 string  `json:"activity"`
+	DependentReposPercentile float64 `json:"dependent_repos_percentile,omitempty"`
 }
 
 type Corpus struct {

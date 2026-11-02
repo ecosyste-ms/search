@@ -76,6 +76,9 @@ func (e *Engine) Search(ctx context.Context, text, ecosystem string, suggestions
 	for _, h := range found.Hits {
 		result.Hits = append(result.Hits, Hit{ID: h.ID, Lexical: h.Score, Score: h.Score})
 	}
+	if err := e.fuseRanks(result.Hits); err != nil {
+		return result, err
+	}
 	if err := e.preferExact(ctx, text, result.Hits); err != nil {
 		return result, err
 	}

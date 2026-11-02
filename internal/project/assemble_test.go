@@ -24,6 +24,9 @@ func TestExportRecord(t *testing.T) {
 	if p.ID != r.PackageID || p.Name == "" {
 		t.Fatal("package identity lost")
 	}
+	if p.Signals.DependentRepos != 14 {
+		t.Fatal("raw dependent count lost or replaced with stored rankings")
+	}
 	var original map[string]any
 	if err := json.Unmarshal(raw, &original); err != nil {
 		t.Fatal(err)

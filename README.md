@@ -8,7 +8,7 @@ An experimental search service for ecosyste.ms, built in Go. [search.ecosyste.ms
 
 The server opens a prebuilt index read-only and uses a separate catalogue for descriptions, categories and public identifiers. Package details are read from the catalogue for returned results. Downloads and indexing run through a separate build command; serving requires no database service or search cluster.
 
-Search retrieves up to 500 BM25 candidates, places exact-name matches first, then selects the top 100. Descriptions use English stemming; names and identifiers are not stemmed. Popularity does not contribute to ranking. The web interface displays up to 100 results, with category suggestions drawn from those selected results. There is no pagination, blank-query browsing or exhaustive facet counting.
+Search retrieves up to 500 BM25 candidates and combines their text and popularity ranks using reciprocal rank fusion (RRF), with equal weights and `k=60`. Popularity uses the highest member-package dependent-repository percentile within its ecosystem. Exact-name matches come first, followed by the remaining ranked results. If no candidate has popularity data, search keeps BM25 ordering and scores. Descriptions use English stemming; names and identifiers are not stemmed. The web interface displays up to 100 results, with category suggestions drawn from those selected results. There is no pagination, blank-query browsing or exhaustive facet counting.
 
 ## Data
 

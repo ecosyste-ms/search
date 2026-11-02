@@ -24,13 +24,14 @@ type publishedManifest struct {
 }
 
 type publishedProject struct {
-	ID           string              `json:"id"`
-	Name         string              `json:"name"`
-	Names        []string            `json:"names"`
-	Descriptions []string            `json:"descriptions"`
-	Aliases      []string            `json:"aliases"`
-	Filters      map[string][]string `json:"filters"`
-	Identifiers  *struct {
+	DependentReposPercentile float64             `json:"dependent_repos_percentile,omitempty"`
+	ID                       string              `json:"id"`
+	Name                     string              `json:"name"`
+	Names                    []string            `json:"names"`
+	Descriptions             []string            `json:"descriptions"`
+	Aliases                  []string            `json:"aliases"`
+	Filters                  map[string][]string `json:"filters"`
+	Identifiers              *struct {
 		Packages     []int               `json:"package_ids"`
 		PURLs        [][]json.RawMessage `json:"package_purls"`
 		Repositories []string            `json:"repositories"`
@@ -174,6 +175,9 @@ func validatePublished(path string, m publishedManifest) error {
 	projects := map[string]bool{}
 	packages := map[int]bool{}
 	err := scanPublished(path, func(p publishedProject, raw []byte) error {
+		if p.DependentReposPercentile < 0 || p.DependentReposPercentile > 1 {
+			return fmt.Errorf("dependent repository percentile must be between zero and one")
+		}
 		if p.ID == "" || p.Name == "" || len(p.Names) == 0 || projects[p.ID] {
 			return fmt.Errorf("missing or duplicate project identity")
 		}
@@ -236,7 +240,7 @@ func buildPublished(input, output string, m publishedManifest) error {
 			}
 			batch = idx.NewBatch()
 		}
-		return encoder.Encode(search.CatalogRecord{ID: p.ID, Name: p.Name, Description: search.ShortDescription(p.Descriptions), Filters: row.Filters, Public: row.Public})
+		return encoder.Encode(search.CatalogRecord{ID: p.ID, Name: p.Name, Description: search.ShortDescription(p.Descriptions), Filters: row.Filters, Public: row.Public, DependentReposPercentile: row.DependentReposPercentile})
 	})
 	if err != nil {
 		return err

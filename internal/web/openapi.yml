@@ -17,7 +17,10 @@ paths:
         Returns ranked results with descriptions, package identities and public links.
         The limit counts projects, not package identities. Each hit includes every
         package membership and bulk lookup request, so responses can be large.
-        Retrieves up to 500 BM25 candidates and places exact-name matches first.
+        Retrieves up to 500 BM25 candidates and combines text and popularity ranks
+        using reciprocal rank fusion (RRF, equal weights, k=60).
+        Exact-name matches are placed first. Without positive popularity data
+        among the candidates, BM25 scores and ordering are retained.
         Category suggestions come from the selected top 100,
         not every matching project. Unknown query parameters are rejected.
       parameters:
@@ -56,7 +59,7 @@ paths:
           in: query
           description: |
             Include category suggestions from the selected top 100 after ecosystem
-            filtering and exact-name ordering, even when limit=10. When false,
+            filtering, ranking and exact-name ordering, even when limit=10. When false,
             both suggestions and suggestions_partial are omitted. When true or omitted, both fields
             are present, including for an empty result set.
           schema:
@@ -141,7 +144,7 @@ components:
             Present when suggestions is enabled; omitted when disabled. Contains
             all four category keys, with empty arrays when no candidates match.
             Values describe the selected top 100 after ecosystem filtering and
-            exact-name ordering, not an exhaustive facet calculation. Includes all ecosystem memberships
+            ranking and exact-name ordering, not an exhaustive facet calculation. Includes all ecosystem memberships
             of those projects. No counts are calculated.
           required: [ecosystem, language, license, activity]
           additionalProperties:
@@ -179,9 +182,15 @@ components:
         score:
           type: number
           description: |
-            Currently equal to lexical; no popularity score is added. Provided
-            for debugging, not comparable across queries or snapshots. Exact-name
-            precedence can override score order; use the returned hit order.
+            When any retrieved candidate has positive popularity data, this is
+            1/(60 + text rank) plus 1/(60 + popularity rank). Ranks are within
+            the retrieved pool; positive popularity ties share a rank. Missing
+            or zero popularity adds nothing. Popularity is the highest member-package
+            dependent-repository percentile within its ecosystem in the selected corpus.
+            If every candidate lacks positive popularity data, score equals lexical.
+            Provided for debugging; scores are not comparable across queries or
+            snapshots. Exact-name precedence can override score order; use the
+            returned hit order.
         identity:
           type: object
           required: [label, package_count]

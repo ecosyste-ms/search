@@ -25,6 +25,7 @@ func Assemble(rows []Package, asOf time.Time, assignments *AssignmentSet) (Corpu
 	c := Corpus{Metadata: map[string]Metadata{}, AsOf: asOf}
 	projects := map[string]*Project{}
 	seen := map[int]bool{}
+	distributions := dependentDistributions(rows)
 	// Prefer the most recently synced cached copy when packages share a repository.
 	repoCopies := map[int]Repository{}
 	for _, p := range rows {
@@ -35,6 +36,9 @@ func Assemble(rows []Package, asOf time.Time, assignments *AssignmentSet) (Corpu
 	for _, p := range rows {
 		if p.ID <= 0 {
 			return c, fmt.Errorf("package without positive ID: %q", p.Name)
+		}
+		if p.Signals.DependentRepos < 0 {
+			return c, fmt.Errorf("negative dependent repository count for package %d", p.ID)
 		}
 		if seen[p.ID] {
 			return c, fmt.Errorf("duplicate package %d", p.ID)
@@ -58,6 +62,7 @@ func Assemble(rows []Package, asOf time.Time, assignments *AssignmentSet) (Corpu
 		project.Languages = append(project.Languages, p.Language)
 		project.Licenses = append(project.Licenses, p.Licenses...)
 		m := c.Metadata[id]
+		m.DependentReposPercentile = max(m.DependentReposPercentile, dependentPercentile(p, distributions))
 		root, ok := RepositoryRoot(p.RepositoryURL)
 		cached, cachedOK := RepositoryRoot(p.Repo.URL)
 		if ok && cachedOK && root == cached {

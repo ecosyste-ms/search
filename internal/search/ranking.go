@@ -1,12 +1,51 @@
 package search
 
 import (
+	"cmp"
 	"context"
 	"slices"
 	"strings"
 
 	"github.com/blevesearch/bleve/v2"
 )
+
+const rrfK = 60
+
+func (e *Engine) fuseRanks(hits []Hit) error {
+	type observation struct {
+		position int
+		value    float64
+	}
+	var positive []observation
+	for i, hit := range hits {
+		ordinal, err := e.Ordinal(hit.ID)
+		if err != nil {
+			return err
+		}
+		if value := e.Compact.Cards[ordinal].DependentReposPercentile; value > 0 {
+			if positive == nil {
+				positive = make([]observation, 0, len(hits))
+			}
+			positive = append(positive, observation{position: i, value: value})
+		}
+	}
+	if len(positive) == 0 {
+		return nil
+	}
+	slices.SortStableFunc(positive, func(a, b observation) int { return cmp.Compare(b.value, a.value) })
+	for i := range hits {
+		hits[i].Score = 1 / float64(rrfK+i+1)
+	}
+	rank, previous := 0, 0.0
+	for i, item := range positive {
+		if item.value != previous {
+			rank, previous = i+1, item.value
+		}
+		hits[item.position].Score += 1 / float64(rrfK+rank)
+	}
+	slices.SortStableFunc(hits, func(a, b Hit) int { return cmp.Compare(b.Score, a.Score) })
+	return nil
+}
 
 func (e *Engine) preferExact(ctx context.Context, text string, hits []Hit) error {
 	if len(hits) < 2 {

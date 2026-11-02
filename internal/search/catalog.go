@@ -19,10 +19,11 @@ import (
 )
 
 type compactCard struct {
-	ID, Name, Description string
-	Public                *PublicProject
-	Entity                *entityCard
-	Offset, Length        int64
+	DependentReposPercentile float64
+	ID, Name, Description    string
+	Public                   *PublicProject
+	Entity                   *entityCard
+	Offset, Length           int64
 }
 
 type compactCatalog struct {
@@ -44,11 +45,12 @@ type compactExport struct {
 }
 
 type CatalogRecord struct {
-	ID          string              `json:"id"`
-	Name        string              `json:"name"`
-	Filters     map[string][]string `json:"filters"`
-	Public      *PublicProject      `json:"public,omitempty"`
-	Description string              `json:"description,omitempty"`
+	DependentReposPercentile float64             `json:"dependent_repos_percentile,omitempty"`
+	ID                       string              `json:"id"`
+	Name                     string              `json:"name"`
+	Filters                  map[string][]string `json:"filters"`
+	Public                   *PublicProject      `json:"public,omitempty"`
+	Description              string              `json:"description,omitempty"`
 }
 
 func ShortDescription(descriptions []string) string {
@@ -112,6 +114,9 @@ func readServingCatalog(path string, manifest compactExport) (*Engine, error) {
 		if record.ID == "" || len(e.Compact.Cards) >= e.Count {
 			return nil, fmt.Errorf("invalid catalog record")
 		}
+		if record.DependentReposPercentile < 0 || record.DependentReposPercentile > 1 {
+			return nil, fmt.Errorf("invalid dependent repository percentile for %s", record.ID)
+		}
 		if _, exists := e.Positions[record.ID]; exists {
 			return nil, fmt.Errorf("duplicate project %s", record.ID)
 		}
@@ -132,6 +137,7 @@ func readServingCatalog(path string, manifest compactExport) (*Engine, error) {
 		}
 		e.Positions[record.ID] = uint32(len(e.Compact.Cards))
 		card := compactCard{ID: record.ID, Name: record.Name, Description: record.Description, Offset: start, Length: decoder.InputOffset() - start}
+		card.DependentReposPercentile = record.DependentReposPercentile
 		if record.Public != nil {
 			card.Entity = makeEntityCard(record.Public)
 			card.Entity.Registry = intern(card.Entity.Registry)

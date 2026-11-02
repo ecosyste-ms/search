@@ -349,6 +349,7 @@ func writePreparedProjects(path string, c project.Corpus, packages map[int]searc
 				public.VerifiedRepositories = append(public.VerifiedRepositories, "https://"+root)
 			}
 			row := map[string]any{"id": p.ID, "name": p.Name, "names": p.Names, "descriptions": p.Descriptions, "aliases": p.Aliases, "filters": search.FacetValues(p, c.Metadata[p.ID]), "identifiers": map[string]any{"package_ids": ids, "package_purls": purls, "repositories": p.Repositories}, "public": public}
+			row["dependent_repos_percentile"] = c.Metadata[p.ID].DependentReposPercentile
 			if err := json.NewEncoder(gz).Encode(row); err != nil {
 				return err
 			}
