@@ -59,7 +59,7 @@ HTML, CSS, JavaScript and the OpenAPI specification are embedded in the executab
 
 ## API
 
-The API base URL is `https://search.ecosyste.ms/api/v1`. The [OpenAPI specification](https://search.ecosyste.ms/openapi.yml) is also [included in the repository](internal/web/openapi.yml).
+The API base URL is `https://search.ecosyste.ms/api/v1`. The [OpenAPI specification](https://search.ecosyste.ms/openapi.yml) is also [included in the repository](internal/web/openapi.yml). The API and specification allow cross-origin browser requests without credentials, using `Access-Control-Allow-Origin: *`.
 
 ```sh
 curl 'https://search.ecosyste.ms/api/v1/search?q=numpy&ecosystem=pypi&limit=100'

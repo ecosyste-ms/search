@@ -6,6 +6,7 @@ info:
     Search an immutable project snapshot. IDs identify projects within that snapshot;
     use returned PURLs and public package/repository links for external lookups.
     Search returns at most 100 results, without pagination or total hit counts.
+    Cross-origin browser requests are allowed without credentials (Access-Control-Allow-Origin: *).
 servers:
   - url: /api/v1
 paths:

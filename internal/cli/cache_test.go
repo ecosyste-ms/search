@@ -35,6 +35,9 @@ func TestSearchCacheHeaders(t *testing.T) {
 		if r.Code != status || r.Header().Get("Cache-Control") != cache {
 			t.Errorf("%s: status=%d cache=%q", path, r.Code, r.Header().Get("Cache-Control"))
 		}
+		if strings.HasPrefix(path, "/api/v1/") && r.Header().Get("Access-Control-Allow-Origin") != "*" {
+			t.Errorf("%s: missing public CORS header for status %d", path, r.Code)
+		}
 	}
 	for _, path := range []string{
 		"/", "/?q=curl", "/?q=not-in-corpus",
