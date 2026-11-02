@@ -47,6 +47,7 @@ docker)
   printf '{"snapshot":{"version":"%s"}}' "$NEW_SHA" > "$dest/release/receipt.json"
   ;;
 dokku)
+  if [[ $1 == ps:inspect ]]; then printf '[{"State":{"Running":true},"Image":"%s"}]' "$SEARCH_IMAGE"; exit; fi
   echo restart >> "$ROOT/restarts"
   [[ $MODE != restart-failure || $(wc -l < "$ROOT/restarts") -gt 1 ]]
   ;;
@@ -55,6 +56,7 @@ curl)
   printf '{"status":"ok","snapshot":{"version":"%s"}}' "$NEW_SHA"
   ;;
 jq)
+  if [[ $1 == -er ]]; then cat >/dev/null; printf '%s' "$SEARCH_IMAGE"; exit; fi
   if [[ $1 == -r ]]; then
     sed -n 's/.*"version":"\([^"]*\)".*/\1/p' "$3"
   else

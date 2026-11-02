@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+bundle=0
+if [[ ${1:-} == --bundle ]]; then
+  bundle=1
+  shift
+fi
+
 if [[ $# != 5 ]]; then
-  echo "Usage: SEARCH_IMAGE=<deployed image ID> $0 APP SNAPSHOT_ROOT ARCHIVE_URL SHA256 HEALTH_URL" >&2
+  echo "Usage: $0 [--bundle] APP SNAPSHOT_ROOT ARCHIVE_URL SHA256 HEALTH_URL" >&2
   exit 2
 fi
 app=$1
@@ -10,7 +16,10 @@ root=$2
 url=$3
 sha=$4
 health=$5
-: "${SEARCH_IMAGE:?Set SEARCH_IMAGE to the deployed application image ID or digest}"
+running_image() {
+  dokku ps:inspect "$app" | jq -er '[.[] | select(.State.Running) | .Image] | unique | if length == 1 then .[0] else error("Expected one running application image") end'
+}
+SEARCH_IMAGE=${SEARCH_IMAGE:-$(running_image)}
 [[ $SEARCH_IMAGE =~ (^sha256:|@sha256:)[0-9a-f]{64}$ ]] || { echo 'Pin SEARCH_IMAGE by image ID or digest' >&2; exit 2; }
 [[ $sha =~ ^[0-9a-f]{64}$ ]] || { echo 'Invalid archive SHA256' >&2; exit 2; }
 [[ $root = /* && $root != / && $root != *,* ]] || { echo 'Use an absolute snapshot directory without commas' >&2; exit 2; }
@@ -19,13 +28,16 @@ exec 9>"$root/.update.lock"
 flock -n 9 || { echo 'Another snapshot update is running' >&2; exit 1; }
 old=$(readlink "$root/current")
 [[ $old == releases/* && $old != *..* && -f $root/$old/receipt.json ]] || { echo 'A working current snapshot is required' >&2; exit 1; }
-if [[ $(jq -r .snapshot.version "$root/$old/receipt.json") == "$sha" ]]; then
+field=.snapshot.version
+if (( bundle )); then field=.bundle_sha256; fi
+if [[ $(jq -r "$field" "$root/$old/receipt.json") == "$sha" ]]; then
   echo 'This snapshot is already selected'
   exit 0
 fi
 mkdir -p "$root/releases"
 work=$(mktemp -d "$root/.update.XXXXXXXX")
 switched=0
+candidate=''
 
 select_snapshot() {
   ln -s "$1" "$root/.current-next-$$" || return
@@ -35,6 +47,7 @@ select_snapshot() {
 cleanup() {
   status=$?
   trap - EXIT
+  if [[ -n $candidate ]]; then docker rm -f "$candidate" >/dev/null || true; fi
   if (( switched && status != 0 )); then
     echo 'Update failed; restoring the previous snapshot' >&2
     if select_snapshot "$old" && dokku ps:restart "$app"; then
@@ -51,23 +64,63 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-docker run --rm --read-only --user "$(id -u):$(id -g)" --env GOMEMLIMIT=2GiB \
-  --mount "type=bind,src=$work,dst=/output" \
-  "$SEARCH_IMAGE" snapshot -url "$url" -sha256 "$sha" -output /output/release
-[[ $(jq -r .snapshot.version "$work/release/receipt.json") == "$sha" ]]
+if (( bundle )); then
+  mkdir -p "$work/release/snapshot"
+  archive="$work/release/search.tar.gz"
+  curl --fail --silent --show-error --location --max-time 600 "$url" -o "$archive"
+  printf '%s  %s\n' "$sha" "$archive" | sha256sum -c -
+  tar -tzf "$archive" > "$work/entries"
+  awk '
+    /(^\/|(^|\/)\.\.?($|\/))/ { exit 1 }
+    !/^(manifest\.json|index-checksums\.json|serving-catalog\.ndjson(\.gz)?|index\/index_meta\.json|index\/store\/[A-Za-z0-9_.-]+)$/ { exit 1 }
+  ' "$work/entries"
+  tar -tvzf "$archive" > "$work/types"
+  awk 'substr($0,1,1) != "-" { exit 1 }' "$work/types"
+  tar --no-same-owner --no-same-permissions --keep-old-files -xzf "$archive" -C "$work/release/snapshot"
+  manifest="$work/release/snapshot/manifest.json"
+  jq -e '.projects > 0 and .packages >= 0 and (.snapshot.version | test("^[0-9a-f]{64}$"))' "$manifest" >/dev/null
+  jq --arg sha "$sha" '{snapshot, projects, packages, bundle_sha256:$sha}' "$manifest" > "$work/release/receipt.json"
+  find "$work" -type d -exec chmod 0755 {} +
+  find "$work" -type f -exec chmod 0444 {} +
+  candidate=$(docker run --rm -d --read-only --user 65532:65532 \
+    --mount "type=bind,src=$work/release/snapshot,dst=/snapshot,readonly" \
+    -p 127.0.0.1::8080 "$SEARCH_IMAGE" explore -index /snapshot/index -catalog /snapshot -addr 0.0.0.0:8080)
+  address=$(docker port "$candidate" 8080/tcp)
+  version=$(jq -r .snapshot.version "$manifest")
+  projects=$(jq -r .projects "$manifest")
+  ready=0
+  for ((attempt=0; attempt<30; attempt++)); do
+    if curl --fail --silent --max-time 5 "http://$address/api/v1/health" \
+      | jq -e --arg version "$version" --argjson projects "$projects" '.status == "ok" and .snapshot.version == $version and .projects == $projects' >/dev/null; then
+      ready=1
+      break
+    fi
+    sleep 2
+  done
+  (( ready )) || { docker logs "$candidate"; echo 'Snapshot failed startup validation' >&2; exit 1; }
+  docker rm -f "$candidate" >/dev/null
+  candidate=''
+else
+  docker run --rm --read-only --user "$(id -u):$(id -g)" --env GOMEMLIMIT=2GiB \
+    --mount "type=bind,src=$work,dst=/output" \
+    "$SEARCH_IMAGE" snapshot -url "$url" -sha256 "$sha" -output /output/release
+  [[ $(jq -r .snapshot.version "$work/release/receipt.json") == "$sha" ]]
+  version=$sha
+fi
 target="releases/$sha"
 if [[ -e $root/$target ]]; then
   echo 'A snapshot with this checksum already exists; inspect it before retrying' >&2
   exit 1
 fi
 mv "$work/release" "$root/$target"
+[[ $(running_image) == "$SEARCH_IMAGE" ]] || { echo 'Application image changed during preparation' >&2; exit 1; }
 switched=1
 select_snapshot "$target"
 dokku ps:restart "$app"
 ready=0
 for ((attempt=0; attempt<30; attempt++)); do
   if curl --fail --silent --show-error --max-time 5 --header 'Cache-Control: no-cache' "$health" \
-      | jq -e --arg sha "$sha" '.status == "ok" and .snapshot.version == $sha' >/dev/null; then
+      | jq -e --arg sha "$version" '.status == "ok" and .snapshot.version == $sha' >/dev/null; then
     ready=1
     break
   fi
@@ -77,4 +130,4 @@ done
 ln -s "$old" "$work/previous"
 mv -Tf "$work/previous" "$root/previous"
 switched=0
-echo "Serving snapshot $sha; previous snapshot retained at $root/previous"
+echo "Serving snapshot $version; previous snapshot retained at $root/previous"

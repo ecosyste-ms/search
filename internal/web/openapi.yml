@@ -217,7 +217,7 @@ components:
           $ref: '#/components/schemas/PublicDetails'
     PublicDetails:
       type: object
-      description: Public identities for this project, with at most ten package memberships in snapshot order. The snapshot retains all memberships.
+      description: Public identities for this project, with at most ten package memberships. Exact query matches come first, then representatives of other registries, then remaining memberships in snapshot order. Exact matches and registry representatives prefer larger registries by package membership count in this snapshot. The snapshot retains all memberships.
       required: [packages, package_count, packages_truncated, repositories, bulk_lookup_requests, grouping_evidence, source, purl_source_sha256]
       properties:
         packages:

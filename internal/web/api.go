@@ -56,7 +56,7 @@ func (e *webServer) searchJSON(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if err := e.AttachPublicDetails(result.Hits); err != nil {
+	if err := e.AttachPublicDetails(result.Hits, q); err != nil {
 		telemetry.RecordError(r.Context(), err)
 		http.Error(w, "Unable to read project details", http.StatusInternalServerError)
 		return

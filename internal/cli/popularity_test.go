@@ -46,7 +46,6 @@ func popularityArchive(t *testing.T, count int) map[string][]byte {
 }
 
 func TestPopularitySnapshotThroughCLI(t *testing.T) {
-	var baseline []search.Hit
 	for _, count := range []int{0, 10} {
 		output := filepath.Join(t.TempDir(), "release")
 		if err := Run(snapshotArgs(t, packFixture(t, popularityArchive(t, count), nil), output), io.Discard); err != nil {
@@ -59,6 +58,7 @@ func TestPopularitySnapshotThroughCLI(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer func() { _ = e.Close() }()
+		baseline := withoutPopularity(t, e)
 		r := httptest.NewRecorder()
 		web.Handler(e).ServeHTTP(r, httptest.NewRequest("GET", "/api/v1/search?q=parsing+libraries&limit=100", nil))
 		var response search.Response
@@ -71,10 +71,14 @@ func TestPopularitySnapshotThroughCLI(t *testing.T) {
 		if len(response.Hits) != 2 {
 			t.Fatal("lost project memberships")
 		}
-		if baseline == nil {
-			baseline = response.Hits
-		} else {
+		if count > 0 {
 			assertPopularityRanking(t, baseline, response.Hits)
+		} else {
+			for _, hit := range response.Hits {
+				if hit.Score != hit.Lexical {
+					t.Fatal("zero usage changed lexical scores")
+				}
+			}
 		}
 	}
 	output := filepath.Join(t.TempDir(), "invalid")
@@ -84,6 +88,27 @@ func TestPopularitySnapshotThroughCLI(t *testing.T) {
 	if _, err := os.Stat(output); !os.IsNotExist(err) {
 		t.Fatal("invalid release published")
 	}
+}
+
+func withoutPopularity(t *testing.T, e *search.Engine) []search.Hit {
+	t.Helper()
+	values := make([]float64, len(e.Compact.Cards))
+	for i := range e.Compact.Cards {
+		values[i] = e.Compact.Cards[i].DependentReposPercentile
+		e.Compact.Cards[i].DependentReposPercentile = 0
+	}
+	defer func() {
+		for i, value := range values {
+			e.Compact.Cards[i].DependentReposPercentile = value
+		}
+	}()
+	r := httptest.NewRecorder()
+	web.Handler(e).ServeHTTP(r, httptest.NewRequest("GET", "/api/v1/search?q=parsing+libraries&limit=100", nil))
+	var response search.Response
+	if err := json.Unmarshal(r.Body.Bytes(), &response); err != nil || r.Code != 200 {
+		t.Fatalf("baseline: %v %s", err, r.Body.String())
+	}
+	return response.Hits
 }
 
 func assertPopularityRanking(t *testing.T, baseline, hits []search.Hit) {

@@ -36,14 +36,23 @@ Check `/api/v1/health` after deployment. It returns the project count, export cr
 
 ## Updates and rollback
 
-Run the updater on the host with the deployed image ID or digest. Set `HEALTH_URL` to the app's externally reachable `/api/v1/health` URL, and provide the new publisher URL and checksum:
+Run the updater on the host with the new publisher URL and checksum. It selects the image of the running Dokku application. Set `HEALTH_URL` to the app's externally reachable `/api/v1/health` URL:
 
 ```sh
-SEARCH_IMAGE="$IMAGE" scripts/update-snapshot search "$ROOT" \
+scripts/update-snapshot search "$ROOT" \
   "$CORPUS_URL" "$CORPUS_SHA256" "$HEALTH_URL"
 ```
 
-The script requires Bash, Docker, Dokku, curl, jq and Linux `flock`. It serializes updates, builds in a separate writable directory, switches `current`, and runs `dokku ps:restart`. It then checks that health reports the expected checksum. A failed restart or health check restores the old pointer and attempts another restart; rollback errors are reported. The previous release remains available through `previous`.
+For a ready-to-serve bundle, pass `--bundle` and the bundle's SHA256:
+
+```sh
+scripts/update-snapshot --bundle search "$ROOT" \
+  "$BUNDLE_URL" "$BUNDLE_SHA256" "$HEALTH_URL"
+```
+
+Bundle activation verifies the archive checksum, rejects unexpected paths and links, and opens the snapshot in a separate read-only container before switching. This startup check validates the index/catalogue pairing as the non-root application user. It avoids rebuilding a prebuilt index. The bundle checksum identifies the release directory; the health endpoint reports the source snapshot version recorded inside it.
+
+The script requires Bash, Docker, Dokku, curl, jq and Linux `flock`, plus permission to manage Docker and write the snapshot root. Run it with `sudo` when needed. It serializes updates, prepares a separate directory, switches `current`, and runs `dokku ps:restart`. It then checks that health reports the expected snapshot. A failed restart or health check restores the old pointer and attempts another restart; rollback errors are reported. The previous release remains available through `previous`. `SEARCH_IMAGE` can override image selection with an image ID or digest, but it must match the running application at activation time.
 
 Schedule this command on the host once snapshot publication is available. The repository installs no scheduler or automatic production deployment. Keep application deployments and snapshot updates from running concurrently. A host crash or forced kill can interrupt rollback, so inspect `current` and `/api/v1/health` before retrying. Failed activation directories are retained; retrying the same checksum requires inspecting and moving the failed directory aside first.
 

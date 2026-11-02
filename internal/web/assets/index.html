@@ -3,7 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Project search · ecosyste.ms</title>
+  <title>{{.Title}}</title>
+  <meta name="description" content="{{.MetaDescription}}">
+  <link rel="canonical" href="{{.Canonical}}">
+  {{if .Robots}}<meta name="robots" content="{{.Robots}}">{{end}}
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="ecosyste.ms Search">
+  <meta property="og:title" content="{{.Title}}">
+  <meta property="og:description" content="{{.MetaDescription}}">
+  <meta property="og:url" content="{{.Canonical}}">
+  <meta name="twitter:card" content="summary">
   <link rel="preload" href="/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/style.css">
   <script src="/search.js" defer></script>
@@ -35,7 +44,7 @@
       <li><a href="{{.URL}}" title="{{.Name}}">{{.Name}}</a>
         {{with .Identity}}<p class="package-identity" title="{{.PURL}}">{{.Label}}</p>{{end}}
         <p class="description">{{.Description}}</p><span class="score" hidden>Score {{.Score}}</span>
-        {{if .Identity}}<details class="identities" data-url="{{.DetailsURL}}?fragment=identities"><summary>Packages and repositories</summary><div class="identity-list"><a href="{{.DetailsURL}}">View packages and repositories</a></div></details>{{end}}
+        {{if .Identity}}<details class="identities" data-url="{{.IdentitiesURL}}"><summary>Packages and repositories</summary><div class="identity-list"><a href="{{.DetailsURL}}">View packages and repositories</a></div></details>{{end}}
       </li>{{end}}</ol>
 {{template "footer" .}}{{define "footer"}}
   </main>

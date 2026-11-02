@@ -35,12 +35,14 @@ func (c CandidateCatalog) suggestions(ordinals []uint32) map[string][]string {
 }
 
 type Engine struct {
-	Snapshot  *SnapshotInfo
-	Index     bleve.Index
-	Count     int
-	Positions map[string]uint32
-	Catalog   CandidateCatalog
-	Compact   *compactCatalog
+	Snapshot       *SnapshotInfo
+	Index          bleve.Index
+	Count          int
+	Positions      map[string]uint32
+	Catalog        CandidateCatalog
+	Compact        *compactCatalog
+	registrySizes  map[registryKey]int
+	ecosystemSizes map[string]int
 }
 
 func (e *Engine) Ordinal(id string) (uint32, error) {

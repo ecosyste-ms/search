@@ -90,6 +90,8 @@ func readServingCatalog(path string, manifest compactExport) (*Engine, error) {
 		reader = gz
 	}
 	e := &Engine{Count: manifest.Projects, Positions: make(map[string]uint32, manifest.Projects), Compact: &compactCatalog{Cards: make([]compactCard, 0, manifest.Projects)}, Catalog: CandidateCatalog{Rows: make([][4]uint16, 0, manifest.Projects)}}
+	e.registrySizes = map[registryKey]int{}
+	e.ecosystemSizes = map[string]int{}
 	var dictionaries [4]map[string]uint16
 	for i := range dictionaries {
 		dictionaries[i] = map[string]uint16{}
@@ -139,6 +141,11 @@ func readServingCatalog(path string, manifest compactExport) (*Engine, error) {
 		card := compactCard{ID: record.ID, Name: record.Name, Description: record.Description, Offset: start, Length: decoder.InputOffset() - start}
 		card.DependentReposPercentile = record.DependentReposPercentile
 		if record.Public != nil {
+			for _, pkg := range record.Public.Packages {
+				key := pkg.registryKey()
+				e.registrySizes[key]++
+				e.ecosystemSizes[ecosystemLabel(key.ecosystem)]++
+			}
 			card.Entity = makeEntityCard(record.Public)
 			card.Entity.Registry = intern(card.Entity.Registry)
 			card.Entity.Ecosystem = intern(card.Entity.Ecosystem)
@@ -237,12 +244,12 @@ func (e *Engine) DisplayName(ordinal uint32) string { return e.Compact.Cards[ord
 func (e *Engine) Description(_ context.Context, ordinal uint32) (string, error) {
 	return cleanDescription(e.Compact.Cards[ordinal].Description), nil
 }
-func (e *Engine) Entities(ordinal uint32) (map[string]any, error) {
+func (e *Engine) Entities(ordinal uint32, query string) (map[string]any, error) {
 	p, err := e.PublicProject(ordinal)
 	if err != nil {
 		return nil, err
 	}
-	response := PublicResponse(p, e.Compact.Source)
+	response := e.PublicResponse(p, e.Compact.Source, query)
 	response["purl_source_sha256"] = e.Compact.PURLSource
 	return response, nil
 }

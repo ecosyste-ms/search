@@ -12,7 +12,7 @@ Search retrieves up to 500 BM25 candidates and combines their text and popularit
 
 ## Data
 
-The packages service's corpus exporter supplies selected package records and project assignments. The `snapshot` command requires those assignments; it validates them but does not generate or revise the grouping. Coverage, metadata and assignments can change between exports.
+The packages service's corpus exporter supplies selected package records and project assignments. This is a selected corpus, not an exhaustive index of every ecosyste.ms package. The `snapshot` command requires those assignments; it validates them but does not generate or revise the grouping. Coverage, metadata and assignments can change between exports. Repository-based groups can include unrelated or spam packages, and component descriptions can be misleading at project level.
 
 | Archive | Contents | Use |
 | --- | --- | --- |
@@ -21,7 +21,7 @@ The packages service's corpus exporter supplies selected package records and pro
 
 The server verifies the index/catalogue pairing before serving. `/api/v1/health` reports the snapshot version, creation date and source checksums. Project IDs are snapshot-local and may change between daily builds when upstream assignments change. Use PURLs or registry/package identifiers for references across snapshots.
 
-The public snapshot download URL is pending. Local setup requires a search bundle or a publisher archive URL and its SHA256. There is no automatic `latest` lookup. Tests use synthetic publisher fixtures and run without a production snapshot.
+A [public search bundle](https://ecosystems-data.s3.eu-west-3.amazonaws.com/search/snapshots/fd2920ceb57f06247b2d0c6149359f2a473a69320948eea574934284549b9e9b/search.tar.gz) contains the 2 November 2026 snapshot: 249,891 projects from 471,954 packages, approximately 64 MB compressed. Its SHA256 is `fd2920ceb57f06247b2d0c6149359f2a473a69320948eea574934284549b9e9b`. This is a fixed snapshot URL; there is no automatic `latest` lookup. Tests use synthetic publisher fixtures and run without a production snapshot.
 
 ## Run locally
 
@@ -57,6 +57,8 @@ The URL can be a public or signed S3-compatible storage URL. The output director
 
 HTML, CSS, JavaScript and the OpenAPI specification are embedded in the executable. Restart `make serve`, or rebuild and restart the binary, after changing them.
 
+Search and project pages have query-specific or project-specific titles, descriptions and social metadata. Canonical URLs omit expansion parameters. Search results and snapshot-local project pages use `noindex, follow`; the homepage remains indexable.
+
 ## API
 
 The API base URL is `https://search.ecosyste.ms/api/v1`. The [OpenAPI specification](https://search.ecosyste.ms/openapi.yml) is also [included in the repository](internal/web/openapi.yml). The API and specification allow cross-origin browser requests without credentials, using `Access-Control-Allow-Origin: *`.
@@ -75,7 +77,7 @@ Search requires `q`, with these optional parameters:
 
 Ecosystem filtering happens before selecting candidates and does not add to relevance scores. Unknown ecosystems return no results. A project can span several ecosystems, so its category suggestions can include other ecosystems. Registry filtering is not supported.
 
-Each search hit contains its name, description, scores and public identity data. The `public` object includes up to ten package identities with PURLs, public links and bulk lookup requests for those packages. `package_count` gives the full membership count; `packages_truncated` indicates a shortened list. Snapshots retain all memberships. No separate detail lookup is required. `/api/v1/health` is retained for deployment checks.
+Each search hit contains its name, description, scores and public identity data. The `public` object includes up to ten package identities with PURLs, public links and bulk lookup requests for those packages. Exact package-name or PURL matches are shown first, followed by a representative from each remaining registry, then other packages in snapshot order. Exact matches and registry representatives prefer registries with more package memberships in the loaded snapshot; these are corpus counts, not global registry sizes. Ecosystem labels also appear in descending membership order. This changes the displayed identities, not project ranking. `package_count` gives the full membership count; `packages_truncated` indicates a shortened list. Snapshots retain all memberships. No separate detail lookup is required. `/api/v1/health` is retained for deployment checks.
 
 The application sets a one-hour cache lifetime for successful search responses and HTML pages. On search.ecosyste.ms, Cloudflare overrides the browser lifetime to one day; shared caches retain the one-hour lifetime. Search errors and health checks use `Cache-Control: no-store`. Cache keys must include the full query string, including filters and result limits. Cached responses can show the previous snapshot until they expire.
 
@@ -103,7 +105,7 @@ The example omits scores and the `public` object. Multi-package projects list th
 make test
 ```
 
-This runs the Go race tests and JavaScript tests. HTTP tests need loopback listener access; the updater tests run only on Linux. The saved publisher fixtures require no Ruby installation, packages checkout or database. [Fixture provenance](internal/cli/testdata/publisher/provenance.json) and the regeneration script are recorded beside the fixtures.
+This runs the Go race tests and JavaScript tests. HTTP tests need loopback listener access; the updater tests run only on Linux and require `jq`. The saved publisher fixtures require no Ruby installation, packages checkout or database. [Fixture provenance](internal/cli/testdata/publisher/provenance.json) and the regeneration script are recorded beside the fixtures.
 
 To compare two builds from identical publisher input:
 
@@ -125,7 +127,7 @@ That check compares API responses and HTML as well as rankings. The code is spli
 
 ## Deployment
 
-The Docker image contains the application and web assets; snapshots are mounted read-only. For data updates, the host downloads and validates the publisher archive, builds a snapshot, switches the active directory and restarts the server. The previous snapshot is retained for rollback. Application deployments are separate from data updates. See the [Docker and Dokku deployment guide](docs/deployment.md).
+The Docker image contains the application and web assets; snapshots are mounted read-only. For data updates, `scripts/update-snapshot` can build from a publisher archive or activate a prebuilt search bundle with `--bundle`. It selects the running application image, validates the new snapshot, switches the active directory and restarts the server. The previous snapshot is retained for rollback. Application deployments are separate from data updates. See the [Docker and Dokku deployment guide](docs/deployment.md).
 
 AppSignal monitoring uses OpenTelemetry. Set `APPSIGNAL_APP_NAME`, `APPSIGNAL_PUSH_API_KEY` and `APPSIGNAL_COLLECTOR_ENDPOINT` to enable it. `APPSIGNAL_APP_ENV` defaults to `production`; the deployment revision comes from `APP_REVISION` or Dokku's `GIT_REV`. With none of the three required settings present, monitoring is disabled. Incomplete configuration logs a warning and the server continues without monitoring.
 

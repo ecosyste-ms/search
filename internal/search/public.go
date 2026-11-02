@@ -1,6 +1,7 @@
 package search
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -194,6 +195,9 @@ func (e *Engine) AttachIdentities(hits []Hit) {
 		for _, value := range e.Catalog.Values[0][e.Catalog.Rows[ordinal][0]] {
 			ecosystems = append(ecosystems, ecosystemLabel(value))
 		}
+		slices.SortStableFunc(ecosystems, func(a, b string) int {
+			return cmp.Compare(e.ecosystemSizes[b], e.ecosystemSizes[a])
+		})
 		identity.Label = strings.Join(ecosystems, " · ")
 		if card.Count == 1 {
 			pkg := PublicPackage{Name: card.Name, Registry: card.Registry, Ecosystem: card.Ecosystem, PURL: PublicPURL(card.PURL)}
@@ -217,14 +221,14 @@ type bulkLookup struct {
 	Registries []string       `json:"verify_registries"`
 }
 
-func (e *Engine) AttachPublicDetails(hits []Hit) error {
+func (e *Engine) AttachPublicDetails(hits []Hit, query string) error {
 	e.AttachIdentities(hits)
 	for i := range hits {
 		ordinal, err := e.Ordinal(hits[i].ID)
 		if err != nil {
 			return err
 		}
-		details, err := e.Entities(ordinal)
+		details, err := e.Entities(ordinal, query)
 		if err != nil {
 			return err
 		}
@@ -233,14 +237,64 @@ func (e *Engine) AttachPublicDetails(hits []Hit) error {
 	return nil
 }
 
-func PublicResponse(p *PublicProject, source *project.CorpusSource) map[string]any {
+type registryKey struct{ ecosystem, registry string }
+
+func (p PublicPackage) registryKey() registryKey {
+	return registryKey{strings.ToLower(p.Ecosystem), strings.ToLower(p.Registry)}
+}
+
+func packagePreview(packages []PublicPackage, query string, sizes map[registryKey]int) []PublicPackage {
+	query = strings.TrimSpace(query)
+	shown := make([]PublicPackage, 0, min(publicPackageLimit, len(packages)))
+	selected := map[int]bool{}
+	registries := map[registryKey]bool{}
+	type candidate struct {
+		index, size int
+		registry    registryKey
+	}
+	for pass := range 3 {
+		if pass == 0 && query == "" {
+			continue
+		}
+		remaining := publicPackageLimit - len(shown)
+		if remaining == 0 {
+			return shown
+		}
+		candidates := make([]candidate, 0, remaining+1)
+		for i, pkg := range packages {
+			match := query != "" && (strings.EqualFold(pkg.Name, query) || strings.EqualFold(string(pkg.PURL), query))
+			if selected[i] || (pass == 0 && !match) {
+				continue
+			}
+			registry := pkg.registryKey()
+			if pass == 1 && (registries[registry] || slices.ContainsFunc(candidates, func(c candidate) bool { return c.registry == registry })) {
+				continue
+			}
+			candidates = append(candidates, candidate{i, sizes[registry], registry})
+			if pass != 2 {
+				slices.SortStableFunc(candidates, func(a, b candidate) int { return cmp.Compare(b.size, a.size) })
+			}
+			candidates = candidates[:min(remaining, len(candidates))]
+			if pass == 2 && len(candidates) == remaining {
+				break
+			}
+		}
+		for _, c := range candidates {
+			shown = append(shown, packages[c.index])
+			selected[c.index], registries[c.registry] = true, true
+		}
+	}
+	return shown
+}
+
+func (e *Engine) PublicResponse(p *PublicProject, source *project.CorpusSource, query string) map[string]any {
 	type resolvedPackage struct {
 		PublicPackage
 		URL      string `json:"url"`
 		APIURL   string `json:"api_url"`
 		Verified bool   `json:"repository_verified"`
 	}
-	shown := p.Packages[:min(publicPackageLimit, len(p.Packages))]
+	shown := packagePreview(p.Packages, query, e.registrySizes)
 	packages := make([]resolvedPackage, 0, len(shown))
 	groups := map[string][]PublicPackage{}
 	for _, pkg := range shown {
