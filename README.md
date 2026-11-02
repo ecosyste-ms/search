@@ -73,9 +73,9 @@ Search requires `q`, with these optional parameters:
 | `ecosystem` | One case-insensitive value, such as `npm`, `pypi` or `rubygems`; omitted or empty means unfiltered |
 | `suggestions` | `true` (default) or `false` |
 
-Ecosystem filtering happens before selecting candidates and does not add to relevance scores. Unknown ecosystems return no results. A project spanning several ecosystems retains all its public identities, so its category suggestions can include other ecosystems. Registry filtering is not supported.
+Ecosystem filtering happens before selecting candidates and does not add to relevance scores. Unknown ecosystems return no results. A project can span several ecosystems, so its category suggestions can include other ecosystems. Registry filtering is not supported.
 
-Each search hit contains its name, description, scores and public identity data. The `public` object includes every package membership, PURL, package/repository link and bulk lookup request body. No separate detail lookup is required. `/api/v1/health` is retained for deployment checks.
+Each search hit contains its name, description, scores and public identity data. The `public` object includes up to ten package identities with PURLs, public links and bulk lookup requests for those packages. `package_count` gives the full membership count; `packages_truncated` indicates a shortened list. Snapshots retain all memberships. No separate detail lookup is required. `/api/v1/health` is retained for deployment checks.
 
 The application sets a one-hour cache lifetime for successful search responses and HTML pages. On search.ecosyste.ms, Cloudflare overrides the browser lifetime to one day; shared caches retain the one-hour lifetime. Search errors and health checks use `Cache-Control: no-store`. Cache keys must include the full query string, including filters and result limits. Cached responses can show the previous snapshot until they expire.
 

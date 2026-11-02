@@ -216,14 +216,22 @@ components:
           $ref: '#/components/schemas/PublicDetails'
     PublicDetails:
       type: object
-      description: Complete public memberships for this project. Array sizes are not bounded by the search limit.
-      required: [packages, repositories, bulk_lookup_requests, grouping_evidence, source, purl_source_sha256]
+      description: Public identities for this project, with at most ten package memberships in snapshot order. The snapshot retains all memberships.
+      required: [packages, package_count, packages_truncated, repositories, bulk_lookup_requests, grouping_evidence, source, purl_source_sha256]
       properties:
         packages:
           type: array
-          description: All package memberships, including channel-specific PURLs. Not truncated by the project limit.
+          description: Up to ten package memberships, including their channel-specific PURLs.
+          maxItems: 10
           items:
             $ref: '#/components/schemas/Package'
+        package_count:
+          type: integer
+          minimum: 0
+          description: Total package memberships in the snapshot, including those omitted from this response.
+        packages_truncated:
+          type: boolean
+          description: True when the project has more packages than this response includes.
         repositories:
           type: array
           items:
@@ -243,7 +251,8 @@ components:
                 type: string
         bulk_lookup_requests:
           type: array
-          description: POST these bodies to the given ecosyste.ms URLs; verify the returned registries. Each body contains up to 100 PURLs or names; the number of requests per project is not capped by the search limit.
+          description: POST these bodies to the given ecosyste.ms URLs; verify the returned registries. Requests cover only the packages included in this response.
+          maxItems: 10
           items:
             type: object
             required: [url, body, verify_registries]
@@ -258,7 +267,7 @@ components:
                     properties:
                       purls:
                         type: array
-                        maxItems: 100
+                        maxItems: 10
                         items:
                           type: string
                   - type: object
@@ -266,7 +275,7 @@ components:
                     properties:
                       names:
                         type: array
-                        maxItems: 100
+                        maxItems: 10
                         items:
                           type: string
                       ecosystem:

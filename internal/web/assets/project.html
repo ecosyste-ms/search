@@ -6,6 +6,7 @@
 {{template "footer" .}}
 {{define "identities"}}
 {{with .Public}}
+  {{if .packages_truncated}}<p>Showing {{len .packages}} of {{.package_count}} packages.</p>{{end}}
   {{range .packages}}<p><a href="{{.URL}}">{{.Ecosystem}} · {{.Registry}} · {{.Name}}</a>{{if .PURL}}<code>{{.PURL}}</code>{{end}}{{if and .DeclaredRepository (not .Verified)}}<small>Unverified repository declaration: {{.DeclaredRepository}}</small>{{end}}</p>{{end}}
   {{range .repositories}}<p><a href="{{.page_url}}">{{.url}}</a></p>{{end}}
 {{else}}<p>No public identifiers available.</p>{{end}}

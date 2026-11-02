@@ -2,11 +2,36 @@ package search
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/ecosyste-ms/search/internal/project"
 )
+
+func TestPublicPackagePreview(t *testing.T) {
+	for _, count := range []int{0, 1, 10, 11, 101} {
+		p := &PublicProject{Packages: []PublicPackage{}, VerifiedRepositories: []string{}}
+		for i := range count {
+			p.Packages = append(p.Packages, PublicPackage{Name: fmt.Sprintf("package-%d", i), Registry: "npmjs.org", Ecosystem: "npm"})
+		}
+		body, err := json.Marshal(PublicResponse(p, nil))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got struct {
+			Packages  []PublicPackage `json:"packages"`
+			Count     int             `json:"package_count"`
+			Truncated bool            `json:"packages_truncated"`
+		}
+		if err := json.Unmarshal(body, &got); err != nil {
+			t.Fatal(err)
+		}
+		if len(got.Packages) != min(count, 10) || got.Count != count || got.Truncated != (count > 10) || len(p.Packages) != count {
+			t.Fatalf("incorrect preview for %d packages: %s", count, body)
+		}
+	}
+}
 
 func TestPublicProvenanceAllowlist(t *testing.T) {
 	source := &project.CorpusSource{Path: "/Users/private-user/source", Provenance: "/private/metadata", SHA256: "input-checksum", Assignments: &project.AssignmentProvenance{ManifestSHA256: "manifest-checksum", AssignmentManifest: project.AssignmentManifest{AssignmentsFile: "/private/assignments", Description: "internal details", AssignmentsSHA256: "assignment-checksum", Projects: 1, Packages: 2}}}

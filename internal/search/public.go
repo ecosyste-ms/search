@@ -12,6 +12,8 @@ import (
 
 type PublicPURL string
 
+const publicPackageLimit = 10
+
 func (p PublicPURL) MarshalJSON() ([]byte, error) {
 	if p == "" {
 		return []byte("null"), nil
@@ -238,9 +240,10 @@ func PublicResponse(p *PublicProject, source *project.CorpusSource) map[string]a
 		APIURL   string `json:"api_url"`
 		Verified bool   `json:"repository_verified"`
 	}
-	packages := make([]resolvedPackage, 0, len(p.Packages))
+	shown := p.Packages[:min(publicPackageLimit, len(p.Packages))]
+	packages := make([]resolvedPackage, 0, len(shown))
 	groups := map[string][]PublicPackage{}
-	for _, pkg := range p.Packages {
+	for _, pkg := range shown {
 		root, ok := project.RepositoryRoot(pkg.DeclaredRepository)
 		cached, cachedOK := project.RepositoryRoot(pkg.CachedRepository)
 		page := packagePage(pkg)
@@ -281,5 +284,5 @@ func PublicResponse(p *PublicProject, source *project.CorpusSource) map[string]a
 	for _, raw := range p.VerifiedRepositories {
 		repos = append(repos, map[string]string{"url": raw, "page_url": repositoryPage(raw), "lookup_url": "https://repos.ecosyste.ms/api/v1/repositories/lookup?" + url.Values{"url": {raw}}.Encode(), "verification": "package declaration agrees with cached repository metadata"})
 	}
-	return map[string]any{"packages": packages, "repositories": repos, "bulk_lookup_requests": requests, "grouping_evidence": p.Evidence, "source": publicSource(source)}
+	return map[string]any{"packages": packages, "package_count": len(p.Packages), "packages_truncated": len(shown) < len(p.Packages), "repositories": repos, "bulk_lookup_requests": requests, "grouping_evidence": p.Evidence, "source": publicSource(source)}
 }

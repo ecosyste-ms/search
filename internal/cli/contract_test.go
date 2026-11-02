@@ -127,14 +127,28 @@ func TestSearchLimitCountsProjects(t *testing.T) {
 			t.Fatalf("unexpected project count: %s", r.Body.String())
 		}
 		hit := body.Hits[0]
-		if len(hit.Public["packages"].([]any)) != memberships || len(hit.Public["bulk_lookup_requests"].([]any)) != 2 {
-			t.Fatal("project limit truncated public memberships or lookup requests")
+		if len(hit.Public["packages"].([]any)) != 10 || len(hit.Public["bulk_lookup_requests"].([]any)) != 1 {
+			t.Fatal("package preview or lookup requests exceed the limit")
+		}
+		if hit.Public["package_count"] != float64(memberships) || hit.Public["packages_truncated"] != true || hit.Identity.Packages != memberships {
+			t.Fatal("full membership count lost")
+		}
+		lookup := hit.Public["bulk_lookup_requests"].([]any)[0].(map[string]any)["body"].(map[string]any)
+		if len(lookup["purls"].([]any)) != 10 {
+			t.Fatal("lookup includes packages outside the preview")
 		}
 		if hit.Identity.URL != "" {
 			t.Fatal("multi-package project arbitrarily selected one public URL")
 		}
 		if hit.Score != hit.Lexical {
 			t.Fatal("documented score equality changed")
+		}
+	}
+	for _, path := range []string{"/project/project:curl", "/project/project:curl?fragment=identities"} {
+		r := httptest.NewRecorder()
+		h.ServeHTTP(r, httptest.NewRequest("GET", path, nil))
+		if r.Code != 200 || strings.Count(r.Body.String(), "<code>pkg:") != 10 || !strings.Contains(r.Body.String(), "Showing 10 of 101 packages.") {
+			t.Fatalf("HTML package preview incorrect: %s", r.Body.String())
 		}
 	}
 }
