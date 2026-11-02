@@ -27,6 +27,7 @@ type publishedProject struct {
 	DependentReposPercentile float64             `json:"dependent_repos_percentile,omitempty"`
 	ID                       string              `json:"id"`
 	Name                     string              `json:"name"`
+	Description              string              `json:"description"`
 	Names                    []string            `json:"names"`
 	Descriptions             []string            `json:"descriptions"`
 	Aliases                  []string            `json:"aliases"`
@@ -240,7 +241,7 @@ func buildPublished(input, output string, m publishedManifest) error {
 			}
 			batch = idx.NewBatch()
 		}
-		return encoder.Encode(search.CatalogRecord{ID: p.ID, Name: p.Name, Description: search.ShortDescription(p.Descriptions), Filters: row.Filters, Public: row.Public, DependentReposPercentile: row.DependentReposPercentile})
+		return encoder.Encode(search.CatalogRecord{ID: p.ID, Name: p.Name, Description: row.Description, Filters: row.Filters, Public: row.Public, DependentReposPercentile: row.DependentReposPercentile})
 	})
 	if err != nil {
 		return err

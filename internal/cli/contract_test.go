@@ -113,7 +113,7 @@ func TestSearchLimitCountsProjects(t *testing.T) {
 		packages = append(packages, map[string]any{"package_id": id, "name": "curl", "purl": "pkg:nix/curl?channel=" + channel, "ecosystem": "nixpkgs", "registry": map[string]any{"id": id, "name": "nixpkgs-" + channel, "ecosystem": "nixpkgs"}, "repository": nil})
 		assignments = append(assignments, project.ProjectAssignment{PackageID: id, PreviousProjectID: fmt.Sprintf("package:%d", id), ProjectID: "project:curl", DisplayName: "curl", Reason: "distribution_release"})
 	}
-	groups := map[string]any{"id": "project:curl", "name": "curl", "reason": "distribution_release", "package_ids": ids}
+	groups := map[string]any{"id": "project:curl", "name": "curl", "reason": "distribution_release", "description": "Transfer data with URLs", "package_ids": ids}
 	files := map[string][]byte{"packages.ndjson.gz": fixtureGzip(t, packages...), "assignments.ndjson.gz": fixtureGzip(t, assignments...), "projects.ndjson.gz": fixtureGzip(t, groups), "excluded.json": []byte("[]")}
 	h := contractHandler(t, files)
 	for _, limit := range []string{"10", "100"} {

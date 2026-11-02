@@ -205,20 +205,17 @@ func archiveAssignments(dir string, m corpusArchiveManifest) (*project.Assignmen
 	if len(a.Rows) != m.Records || len(a.Projects) != m.Projects {
 		return nil, fmt.Errorf("assignment counts differ")
 	}
-	if err := validateArchiveProjects(dir, m, a); err != nil {
-		return nil, err
-	}
 	return a, nil
 }
 
-func validateArchiveProjects(dir string, m corpusArchiveManifest, a *project.AssignmentSet) error {
+func readArchiveProjects(dir string, m corpusArchiveManifest, a *project.AssignmentSet) (map[string]string, error) {
 	seen := map[int]bool{}
-	groups := map[string]bool{}
+	descriptions := map[string]string{}
 	err := storage.ReadGzipRows(filepath.Join(dir, "projects.ndjson.gz"), func(d *json.Decoder) error {
 		for {
 			var row struct {
-				ID, Name, Reason string
-				Packages         []int `json:"package_ids"`
+				ID, Name, Reason, Description string
+				Packages                      []int `json:"package_ids"`
 			}
 			if err := d.Decode(&row); err == io.EOF {
 				return nil
@@ -226,10 +223,13 @@ func validateArchiveProjects(dir string, m corpusArchiveManifest, a *project.Ass
 				return err
 			}
 			assignment, ok := a.Projects[row.ID]
-			if !ok || groups[row.ID] || assignment.DisplayName != row.Name || assignment.Reason != row.Reason || len(row.Packages) == 0 {
+			if !ok || descriptions[row.ID] != "" || assignment.DisplayName != row.Name || assignment.Reason != row.Reason || len(row.Packages) == 0 {
 				return fmt.Errorf("project membership mismatch")
 			}
-			groups[row.ID] = true
+			if strings.TrimSpace(row.Description) == "" {
+				return fmt.Errorf("project description required: %s", row.ID)
+			}
+			descriptions[row.ID] = row.Description
 			for _, id := range row.Packages {
 				if seen[id] || a.Rows[id].ProjectID != row.ID {
 					return fmt.Errorf("package membership mismatch")
@@ -239,12 +239,12 @@ func validateArchiveProjects(dir string, m corpusArchiveManifest, a *project.Ass
 		}
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if len(seen) != m.Records || len(groups) != m.Projects {
-		return fmt.Errorf("project counts differ")
+	if len(seen) != m.Records || len(descriptions) != m.Projects {
+		return nil, fmt.Errorf("project counts differ")
 	}
-	return nil
+	return descriptions, nil
 }
 
 func prepareArchive(dir, output, archiveSHA string) (publishedManifest, error) {
@@ -257,6 +257,10 @@ func prepareArchive(dir, output, archiveSHA string) (publishedManifest, error) {
 	if err != nil {
 		return result, err
 	}
+	descriptions, err := readArchiveProjects(dir, m, a)
+	if err != nil {
+		return result, err
+	}
 	rows, public, err := readArchivePackages(dir, m, a)
 	if err != nil {
 		return result, err
@@ -266,7 +270,7 @@ func prepareArchive(dir, output, archiveSHA string) (publishedManifest, error) {
 	if err != nil {
 		return result, err
 	}
-	if err := writePreparedProjects(output, c, public); err != nil {
+	if err := writePreparedProjects(output, c, public, descriptions); err != nil {
 		return result, err
 	}
 	digest, err := storage.FileSHA(filepath.Join(dir, "manifest.json"))
@@ -329,7 +333,7 @@ func readArchivePackages(dir string, m corpusArchiveManifest, a *project.Assignm
 	return rows, public, nil
 }
 
-func writePreparedProjects(path string, c project.Corpus, packages map[int]search.PublicPackage) error {
+func writePreparedProjects(path string, c project.Corpus, packages map[int]search.PublicPackage, descriptions map[string]string) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return err
@@ -350,6 +354,7 @@ func writePreparedProjects(path string, c project.Corpus, packages map[int]searc
 			}
 			row := map[string]any{"id": p.ID, "name": p.Name, "names": p.Names, "descriptions": p.Descriptions, "aliases": p.Aliases, "filters": search.FacetValues(p, c.Metadata[p.ID]), "identifiers": map[string]any{"package_ids": ids, "package_purls": purls, "repositories": p.Repositories}, "public": public}
 			row["dependent_repos_percentile"] = c.Metadata[p.ID].DependentReposPercentile
+			row["description"] = descriptions[p.ID]
 			if err := json.NewEncoder(gz).Encode(row); err != nil {
 				return err
 			}

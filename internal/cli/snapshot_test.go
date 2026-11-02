@@ -65,7 +65,7 @@ func archiveFixture(t *testing.T) map[string][]byte {
 		rows = append(rows, map[string]any{"package_id": id, "name": name, "purl": purl, "ecosystem": ecosystem, "registry": map[string]any{"id": id, "name": registry, "ecosystem": ecosystem}, "namespace": nil, "description": "Parsing libraries for JavaScript", "rankings": map[string]any{}, "repository": nil, "status": nil})
 		assignments = append(assignments, project.ProjectAssignment{PackageID: id, PreviousProjectID: "package:old", ProjectID: projectID, DisplayName: display, Reason: reason})
 	}
-	groups = append(groups, map[string]any{"id": "project:babel", "name": "babel/babel", "reason": "repository", "package_ids": []int{1}}, map[string]any{"id": "project:curl", "name": "curl", "reason": "distribution_release", "package_ids": []int{2, 3}})
+	groups = append(groups, map[string]any{"id": "project:babel", "name": "babel/babel", "reason": "repository", "description": "Parsing libraries for JavaScript", "package_ids": []int{1}}, map[string]any{"id": "project:curl", "name": "curl", "reason": "distribution_release", "description": "Parsing libraries for JavaScript", "package_ids": []int{2, 3}})
 	return map[string][]byte{"packages.ndjson.gz": fixtureGzip(t, rows...), "projects.ndjson.gz": fixtureGzip(t, groups...), "assignments.ndjson.gz": fixtureGzip(t, assignments...), "excluded.json": []byte("[]")}
 }
 func packFixture(t *testing.T, files map[string][]byte, change func(map[string]any)) []byte {

@@ -30,10 +30,10 @@ func ecosystemFixture(t *testing.T) map[string][]byte {
 		packages = append(packages, map[string]any{"package_id": i, "name": name, "purl": "pkg:" + ecosystem + "/" + name, "ecosystem": ecosystem, "registry": map[string]any{"id": i, "name": registry, "ecosystem": ecosystem}, "description": "HTTP client library", "repository": nil})
 		assignments = append(assignments, project.ProjectAssignment{PackageID: i, PreviousProjectID: pid, ProjectID: pid, DisplayName: name, Reason: "package"})
 		if i <= 120 {
-			groups = append(groups, map[string]any{"id": pid, "name": name, "reason": "package", "package_ids": []int{i}})
+			groups = append(groups, map[string]any{"id": pid, "name": name, "reason": "package", "description": "HTTP client library", "package_ids": []int{i}})
 		}
 	}
-	groups = append(groups, map[string]any{"id": "project:shared", "name": "quiet-client", "reason": "package", "package_ids": []int{121, 122}})
+	groups = append(groups, map[string]any{"id": "project:shared", "name": "quiet-client", "reason": "package", "description": "HTTP client library", "package_ids": []int{121, 122}})
 	return map[string][]byte{"packages.ndjson.gz": fixtureGzip(t, packages...), "assignments.ndjson.gz": fixtureGzip(t, assignments...), "projects.ndjson.gz": fixtureGzip(t, groups...), "excluded.json": []byte("[]")}
 }
 

@@ -29,7 +29,7 @@ func TestSearchAPIAndHTML(t *testing.T) {
 		pid := fmt.Sprintf("package:%d", id)
 		packages = append(packages, map[string]any{"package_id": id, "name": name, "purl": "pkg:npm/" + url.PathEscape(name), "ecosystem": "npm", "registry": map[string]any{"id": 1, "name": "npmjs.org", "ecosystem": "npm"}, "description": "Parsing libraries for HTTP clients", "repository": nil})
 		assignments = append(assignments, project.ProjectAssignment{PackageID: id, PreviousProjectID: pid, ProjectID: pid, DisplayName: name, Reason: "package"})
-		groups = append(groups, map[string]any{"id": pid, "name": name, "reason": "package", "package_ids": []int{id}})
+		groups = append(groups, map[string]any{"id": pid, "name": name, "reason": "package", "description": "Parsing libraries for HTTP clients", "package_ids": []int{id}})
 	}
 	files := map[string][]byte{"packages.ndjson.gz": fixtureGzip(t, packages...), "assignments.ndjson.gz": fixtureGzip(t, assignments...), "projects.ndjson.gz": fixtureGzip(t, groups...), "excluded.json": []byte("[]")}
 	output := filepath.Join(t.TempDir(), "release")

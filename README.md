@@ -21,7 +21,7 @@ The packages service's corpus exporter supplies selected package records and pro
 
 The server verifies the index/catalogue pairing before serving. `/api/v1/health` reports the snapshot version, creation date and source checksums. Project IDs are snapshot-local and may change between daily builds when upstream assignments change. Use PURLs or registry/package identifiers for references across snapshots.
 
-A [public search bundle](https://ecosystems-data.s3.eu-west-3.amazonaws.com/search/snapshots/fd2920ceb57f06247b2d0c6149359f2a473a69320948eea574934284549b9e9b/search.tar.gz) contains the 2 November 2026 snapshot: 249,891 projects from 471,954 packages, approximately 64 MB compressed. Its SHA256 is `fd2920ceb57f06247b2d0c6149359f2a473a69320948eea574934284549b9e9b`. This is a fixed snapshot URL; there is no automatic `latest` lookup. Tests use synthetic publisher fixtures and run without a production snapshot.
+A [public search bundle](https://ecosystems-data.s3.eu-west-3.amazonaws.com/search/snapshots/72f6bd43fc1510b8e234644cf1decee10f5989b4bc0744f3bd1d9bf33b9b6407/search.tar.gz) contains the 2 November 2026 snapshot: 249,891 projects from 471,954 packages, approximately 66 MB compressed. Its SHA256 is `72f6bd43fc1510b8e234644cf1decee10f5989b4bc0744f3bd1d9bf33b9b6407`. This is a fixed snapshot URL; there is no automatic `latest` lookup. Tests use synthetic publisher fixtures and run without a production snapshot.
 
 ## Run locally
 

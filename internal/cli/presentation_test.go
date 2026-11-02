@@ -32,7 +32,7 @@ func TestMatchingPackagePreviewThroughHTTP(t *testing.T) {
 	}
 	packages = append(packages, map[string]any{"package_id": 15, "name": "unrelated", "purl": nil, "ecosystem": "pypi", "registry": map[string]any{"id": 14, "name": "pypi.org", "ecosystem": "pypi"}, "repository": nil})
 	assignments = append(assignments, project.ProjectAssignment{PackageID: 15, PreviousProjectID: "package:15", ProjectID: "project:other", DisplayName: "unrelated", Reason: "package"})
-	files := map[string][]byte{"packages.ndjson.gz": fixtureGzip(t, packages...), "assignments.ndjson.gz": fixtureGzip(t, assignments...), "projects.ndjson.gz": fixtureGzip(t, map[string]any{"id": "project:babel", "name": "babel/babel", "reason": "repository", "package_ids": ids}, map[string]any{"id": "project:other", "name": "unrelated", "reason": "package", "package_ids": []int{15}}), "excluded.json": []byte("[]")}
+	files := map[string][]byte{"packages.ndjson.gz": fixtureGzip(t, packages...), "assignments.ndjson.gz": fixtureGzip(t, assignments...), "projects.ndjson.gz": fixtureGzip(t, map[string]any{"id": "project:babel", "name": "babel/babel", "reason": "repository", "description": "JavaScript compiler", "package_ids": ids}, map[string]any{"id": "project:other", "name": "unrelated", "reason": "package", "description": "Unrelated package", "package_ids": []int{15}}), "excluded.json": []byte("[]")}
 	h := contractHandler(t, files)
 	q := url.Values{"q": {"@babel/core"}}.Encode()
 	r := httptest.NewRecorder()

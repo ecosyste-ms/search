@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"unicode/utf16"
 
 	"github.com/ecosyste-ms/search/internal/project"
 	"github.com/ecosyste-ms/search/internal/storage"
@@ -51,20 +50,6 @@ type CatalogRecord struct {
 	Filters                  map[string][]string `json:"filters"`
 	Public                   *PublicProject      `json:"public,omitempty"`
 	Description              string              `json:"description,omitempty"`
-}
-
-func ShortDescription(descriptions []string) string {
-	for _, s := range descriptions {
-		if strings.TrimSpace(s) == "" {
-			continue
-		}
-		units := utf16.Encode([]rune(s))
-		if len(units) > 300 {
-			return string(utf16.Decode(units[:297])) + "…"
-		}
-		return s
-	}
-	return "No description available."
 }
 
 func readServingCatalog(path string, manifest compactExport) (*Engine, error) {
