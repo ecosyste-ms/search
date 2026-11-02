@@ -235,7 +235,7 @@ func (e *Engine) closeDetails() error {
 func (e *Engine) Close() error                      { return errors.Join(e.closeDetails(), e.Index.Close()) }
 func (e *Engine) DisplayName(ordinal uint32) string { return e.Compact.Cards[ordinal].Name }
 func (e *Engine) Description(_ context.Context, ordinal uint32) (string, error) {
-	return e.Compact.Cards[ordinal].Description, nil
+	return cleanDescription(e.Compact.Cards[ordinal].Description), nil
 }
 func (e *Engine) Entities(ordinal uint32) (map[string]any, error) {
 	p, err := e.PublicProject(ordinal)
