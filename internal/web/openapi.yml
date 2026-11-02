@@ -17,7 +17,8 @@ paths:
         Returns ranked results with descriptions, package identities and public links.
         The limit counts projects, not package identities. Each hit includes every
         package membership and bulk lookup request, so responses can be large.
-        Category suggestions come from the top 100 candidates,
+        Retrieves up to 500 BM25 candidates and places exact-name matches first.
+        Category suggestions come from the selected top 100,
         not every matching project. Unknown query parameters are rejected.
       parameters:
         - name: q
@@ -36,7 +37,7 @@ paths:
             Case-insensitive; surrounding whitespace is ignored. Omitted or empty
             means all ecosystems. At most 100 UTF-8 bytes after trimming.
             Unknown values return no results. Applied before
-            selecting the top 100 candidates, without adding to relevance scores.
+            retrieving up to 500 candidates, without adding to relevance scores.
             Multi-ecosystem projects retain all public identifiers, and their
             category suggestions can include other ecosystems. Repeated values
             are rejected.
@@ -54,9 +55,9 @@ paths:
         - name: suggestions
           in: query
           description: |
-            Include category suggestions from up to 100 candidates after ecosystem
-            filtering, even when limit=10. When false, both suggestions and
-            suggestions_partial are omitted. When true or omitted, both fields
+            Include category suggestions from the selected top 100 after ecosystem
+            filtering and exact-name ordering, even when limit=10. When false,
+            both suggestions and suggestions_partial are omitted. When true or omitted, both fields
             are present, including for an empty result set.
           schema:
             type: boolean
@@ -139,8 +140,8 @@ components:
           description: |
             Present when suggestions is enabled; omitted when disabled. Contains
             all four category keys, with empty arrays when no candidates match.
-            Values describe up to 100 candidates after ecosystem filtering, not
-            an exhaustive facet calculation. Includes all ecosystem memberships
+            Values describe the selected top 100 after ecosystem filtering and
+            exact-name ordering, not an exhaustive facet calculation. Includes all ecosystem memberships
             of those projects. No counts are calculated.
           required: [ecosystem, language, license, activity]
           additionalProperties:

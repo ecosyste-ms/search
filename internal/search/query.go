@@ -9,6 +9,9 @@ import (
 	"github.com/ecosyste-ms/search/internal/project"
 )
 
+const candidateLimit = 500
+const resultLimit = 100
+
 type CandidateCatalog struct {
 	Rows   [][4]uint16
 	Values [4][][]string
@@ -55,7 +58,7 @@ type Response struct {
 
 func (e *Engine) Search(ctx context.Context, text, ecosystem string, suggestions bool, display int) (Response, error) {
 	result := Response{Hits: []Hit{}}
-	if strings.TrimSpace(text) == "" || (display != 10 && display != 100) {
+	if strings.TrimSpace(text) == "" || (display != 10 && display != resultLimit) {
 		return result, fmt.Errorf("query required and result limit must be 10 or 100")
 	}
 	q := mappedLexicalQuery(text, e.Index.Mapping())
@@ -65,30 +68,39 @@ func (e *Engine) Search(ctx context.Context, text, ecosystem string, suggestions
 		filter.SetBoost(0)
 		q = bleve.NewConjunctionQuery(q, filter)
 	}
-	request := bleve.NewSearchRequestOptions(q, 100, 0, false)
+	request := bleve.NewSearchRequestOptions(q, candidateLimit, 0, false)
 	found, err := e.Index.SearchInContext(ctx, request)
 	if err != nil {
 		return result, err
 	}
-	ordinals := make([]uint32, 0, len(found.Hits))
 	for _, h := range found.Hits {
+		result.Hits = append(result.Hits, Hit{ID: h.ID, Lexical: h.Score, Score: h.Score})
+	}
+	if err := e.preferExact(ctx, text, result.Hits); err != nil {
+		return result, err
+	}
+	result.Hits = result.Hits[:min(resultLimit, len(result.Hits))]
+	ordinals := make([]uint32, 0, len(result.Hits))
+	for i := range result.Hits {
+		h := &result.Hits[i]
 		ordinal, err := e.Ordinal(h.ID)
 		if err != nil {
 			return result, err
 		}
 		ordinals = append(ordinals, ordinal)
+		if i >= display {
+			continue
+		}
 		description, err := e.Description(ctx, ordinal)
 		if err != nil {
 			return result, err
 		}
-		result.Hits = append(result.Hits, Hit{ID: h.ID, Name: e.DisplayName(ordinal), Description: description, Lexical: h.Score, Score: h.Score})
+		h.Name = e.DisplayName(ordinal)
+		h.Description = description
 	}
 	if suggestions {
 		result.Suggestions = e.Catalog.suggestions(ordinals)
 		result.SuggestionsPartial = true
-	}
-	if err := e.preferExact(ctx, text, result.Hits); err != nil {
-		return result, err
 	}
 	result.Hits = result.Hits[:min(display, len(result.Hits))]
 	return result, nil

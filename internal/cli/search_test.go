@@ -21,7 +21,7 @@ import (
 func TestSearchAPIAndHTML(t *testing.T) {
 	packages, assignments, groups := []any{}, []any{}, []any{}
 	names := []string{"@babel/core", "babel-core", "org.example:core", "org.example-core", "openssl", "openssl", "requests"}
-	for i := 0; i < 150; i++ {
+	for i := 0; i < 600; i++ {
 		names = append(names, fmt.Sprintf("utility-%d", i))
 	}
 	for i, name := range names {
