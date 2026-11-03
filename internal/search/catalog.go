@@ -1,7 +1,6 @@
 package search
 
 import (
-	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -20,7 +19,6 @@ import (
 type compactCard struct {
 	DependentReposPercentile float64
 	ID, Name, Description    string
-	Public                   *PublicProject
 	Entity                   *entityCard
 	Offset, Length           int64
 }
@@ -44,12 +42,12 @@ type compactExport struct {
 }
 
 type CatalogRecord struct {
-	DependentReposPercentile float64             `json:"dependent_repos_percentile,omitempty"`
+	DependentReposPercentile float64             `json:"dependent_repos_percentile"`
 	ID                       string              `json:"id"`
 	Name                     string              `json:"name"`
 	Filters                  map[string][]string `json:"filters"`
-	Public                   *PublicProject      `json:"public,omitempty"`
-	Description              string              `json:"description,omitempty"`
+	Public                   *PublicProject      `json:"public"`
+	Description              string              `json:"description"`
 }
 
 func readServingCatalog(path string, manifest compactExport) (*Engine, error) {
@@ -65,15 +63,6 @@ func readServingCatalog(path string, manifest compactExport) (*Engine, error) {
 	}()
 	hash := sha256.New()
 	reader := io.TeeReader(f, hash)
-	plain := !strings.HasSuffix(path, ".gz")
-	if !plain {
-		gz, err := gzip.NewReader(reader)
-		if err != nil {
-			return nil, err
-		}
-		defer func() { _ = gz.Close() }()
-		reader = gz
-	}
 	e := &Engine{Count: manifest.Projects, Positions: make(map[string]uint32, manifest.Projects), Compact: &compactCatalog{Cards: make([]compactCard, 0, manifest.Projects)}, Catalog: CandidateCatalog{Rows: make([][4]uint16, 0, manifest.Projects)}}
 	e.registrySizes = map[registryKey]int{}
 	e.ecosystemSizes = map[string]int{}
@@ -91,7 +80,10 @@ func readServingCatalog(path string, manifest compactExport) (*Engine, error) {
 		return value
 	}
 	for {
-		var record CatalogRecord
+		var record struct {
+			CatalogRecord
+			Percentile *float64 `json:"dependent_repos_percentile"`
+		}
 		start := decoder.InputOffset()
 		if err := decoder.Decode(&record); err == io.EOF {
 			break
@@ -101,8 +93,14 @@ func readServingCatalog(path string, manifest compactExport) (*Engine, error) {
 		if record.ID == "" || len(e.Compact.Cards) >= e.Count {
 			return nil, fmt.Errorf("invalid catalog record")
 		}
-		if record.DependentReposPercentile < 0 || record.DependentReposPercentile > 1 {
+		if record.Percentile == nil || *record.Percentile < 0 || *record.Percentile > 1 {
 			return nil, fmt.Errorf("invalid dependent repository percentile for %s", record.ID)
+		}
+		if record.Public == nil {
+			return nil, fmt.Errorf("public record missing: %s", record.ID)
+		}
+		if strings.TrimSpace(record.Description) == "" {
+			return nil, fmt.Errorf("description missing: %s", record.ID)
 		}
 		if _, exists := e.Positions[record.ID]; exists {
 			return nil, fmt.Errorf("duplicate project %s", record.ID)
@@ -124,24 +122,17 @@ func readServingCatalog(path string, manifest compactExport) (*Engine, error) {
 		}
 		e.Positions[record.ID] = uint32(len(e.Compact.Cards))
 		card := compactCard{ID: record.ID, Name: record.Name, Description: record.Description, Offset: start, Length: decoder.InputOffset() - start}
-		card.DependentReposPercentile = record.DependentReposPercentile
-		if record.Public != nil {
-			for _, pkg := range record.Public.Packages {
-				key := pkg.registryKey()
-				e.registrySizes[key]++
-				e.ecosystemSizes[ecosystemLabel(key.ecosystem)]++
-			}
-			card.Entity = makeEntityCard(record.Public)
-			card.Entity.Registry = intern(card.Entity.Registry)
-			card.Entity.Ecosystem = intern(card.Entity.Ecosystem)
-			if card.Entity.Name == card.Name {
-				card.Entity.Name = card.Name
-			}
-			if !plain {
-				card.Public = record.Public
-			}
-		} else if manifest.PublicEntities {
-			return nil, fmt.Errorf("public record missing: %s", record.ID)
+		card.DependentReposPercentile = *record.Percentile
+		for _, pkg := range record.Public.Packages {
+			key := pkg.registryKey()
+			e.registrySizes[key]++
+			e.ecosystemSizes[ecosystemLabel(key.ecosystem)]++
+		}
+		card.Entity = makeEntityCard(record.Public)
+		card.Entity.Registry = intern(card.Entity.Registry)
+		card.Entity.Ecosystem = intern(card.Entity.Ecosystem)
+		if card.Entity.Name == card.Name {
+			card.Entity.Name = card.Name
 		}
 		e.Compact.Cards = append(e.Compact.Cards, card)
 		e.Catalog.Rows = append(e.Catalog.Rows, row)
@@ -152,10 +143,8 @@ func readServingCatalog(path string, manifest compactExport) (*Engine, error) {
 	if fmt.Sprintf("%x", hash.Sum(nil)) != manifest.Files[filepath.Base(path)].SHA256 {
 		return nil, fmt.Errorf("catalog checksum mismatch")
 	}
-	if plain {
-		e.Compact.File = f
-		keepFile = true
-	}
+	e.Compact.File = f
+	keepFile = true
 	return e, nil
 }
 
@@ -182,15 +171,15 @@ func Open(indexPath, dir string) (*Engine, error) {
 	if err := storage.ReadJSON(filepath.Join(dir, "manifest.json"), &manifest); err != nil {
 		return nil, err
 	}
-	if manifest.Projects < 1 || !manifest.PublicEntities {
+	if manifest.Projects < 1 || !manifest.PublicEntities || manifest.Snapshot == nil {
 		return nil, fmt.Errorf("invalid compact export manifest")
 	}
 	if err := verifySnapshotIndex(indexPath, dir, manifest); err != nil {
 		return nil, err
 	}
-	name := "serving-catalog.ndjson.gz"
-	if _, ok := manifest.Files["serving-catalog.ndjson"]; ok {
-		name = "serving-catalog.ndjson"
+	const name = "serving-catalog.ndjson"
+	if _, ok := manifest.Files[name]; !ok {
+		return nil, fmt.Errorf("serving-catalog.ndjson required")
 	}
 	e, err := readServingCatalog(filepath.Join(dir, name), manifest)
 	if err != nil {

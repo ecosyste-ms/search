@@ -21,7 +21,7 @@ func TestHostBundleActivation(t *testing.T) {
 	if _, err := exec.LookPath("jq"); err != nil {
 		t.Fatal("jq required for bundle updater tests")
 	}
-	for _, mode := range []string{"success", "checksum", "unsafe-path", "symlink", "startup-failure", "restart-failure", "health-failure", "image-change"} {
+	for _, mode := range []string{"success", "checksum", "unsafe-path", "compressed-catalogue", "symlink", "startup-failure", "restart-failure", "health-failure", "image-change"} {
 		t.Run(mode, func(t *testing.T) {
 			root, bin := t.TempDir(), t.TempDir()
 			old := filepath.Join(root, "releases", "old")
@@ -50,6 +50,9 @@ func TestHostBundleActivation(t *testing.T) {
 			header := &tar.Header{Name: "manifest.json", Mode: 0644, Size: int64(len(manifest))}
 			if mode == "unsafe-path" {
 				header.Name = "../escaped"
+			}
+			if mode == "compressed-catalogue" {
+				header.Name = "serving-catalog.ndjson.gz"
 			}
 			if mode == "symlink" {
 				header.Typeflag = tar.TypeSymlink

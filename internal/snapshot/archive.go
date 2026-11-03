@@ -170,13 +170,9 @@ func archiveAssignments(dir string, m corpusArchiveManifest) (*project.Assignmen
 	if am.Packages != m.Records || am.Projects != m.Projects || am.SourcePackageSHA256 != m.SHA256 || am.AssignmentsFile != "assignments.ndjson.gz" || am.AssignmentsSHA256 != m.Files["assignments.ndjson.gz"].SHA256 {
 		return nil, fmt.Errorf("assignment manifest mismatch")
 	}
-	asOf := m.Finished
-	if am.AsOf != "" {
-		asOf = am.AsOf
-	}
-	when, err := time.Parse(time.RFC3339, asOf)
+	when, err := time.Parse(time.RFC3339, am.AsOf)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("assignment as_of: %w", err)
 	}
 	a := &project.AssignmentSet{Rows: map[int]project.ProjectAssignment{}, Projects: map[string]project.ProjectAssignment{}, AsOf: when}
 	err = storage.ReadGzipRows(filepath.Join(dir, "assignments.ndjson.gz"), func(d *json.Decoder) error {

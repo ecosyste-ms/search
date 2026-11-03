@@ -15,13 +15,14 @@ func TestCatalogDependentPercentile(t *testing.T) {
 		want    float64
 		invalid bool
 	}{
-		{"", 0, false}, {`,"dependent_repos_percentile":0.5`, .5, false},
-		{`,"dependent_repos_percentile":1`, 1, false}, {`,"dependent_repos_percentile":null`, 0, false},
+		{"", 0, true}, {`,"dependent_repos_percentile":0`, 0, false}, {`,"dependent_repos_percentile":0.5`, .5, false},
+		{`,"dependent_repos_percentile":1`, 1, false}, {`,"dependent_repos_percentile":null`, 0, true},
 		{`,"dependent_repos_percentile":-0.1`, 0, true}, {`,"dependent_repos_percentile":1.01`, 0, true},
 		{`,"dependent_repos_percentile":"0.5"`, 0, true},
 	} {
 		t.Run(tc.value, func(t *testing.T) {
-			data := []byte(`{"id":"project:1","name":"example","filters":{}` + tc.value + `}`)
+			data := []byte(`{"id":"project:1","name":"example","description":"Example package","filters":{},"public":{"packages":[],"verified_repositories":[]}}`)
+			data = append(data[:len(data)-1], []byte(tc.value+`}`)...)
 			path := filepath.Join(t.TempDir(), "serving-catalog.ndjson")
 			if err := os.WriteFile(path, data, 0600); err != nil {
 				t.Fatal(err)

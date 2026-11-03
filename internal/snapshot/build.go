@@ -24,7 +24,7 @@ type publishedManifest struct {
 }
 
 type publishedProject struct {
-	DependentReposPercentile float64             `json:"dependent_repos_percentile,omitempty"`
+	DependentReposPercentile float64             `json:"dependent_repos_percentile"`
 	ID                       string              `json:"id"`
 	Name                     string              `json:"name"`
 	Description              string              `json:"description"`

@@ -43,7 +43,7 @@ func TestRankFusion(t *testing.T) {
 	}
 }
 
-func TestRankFusionFallbackAndTies(t *testing.T) {
+func TestRankFusionZeroUsageAndTies(t *testing.T) {
 	for _, values := range [][]float64{nil, {0, 0, 0}, {.1, 1}} {
 		e, hits := fusionFixture(values)
 		before := slices.Clone(hits)
@@ -52,7 +52,7 @@ func TestRankFusionFallbackAndTies(t *testing.T) {
 		}
 		for i, h := range hits {
 			if h.ID != before[i].ID {
-				t.Fatal("unstable tie or fallback")
+				t.Fatal("zero usage or tied ranks changed ordering")
 			}
 			if values[i] == 0 && h.Score != before[i].Score {
 				t.Fatal("missing usage changed scores")

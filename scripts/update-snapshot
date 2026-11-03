@@ -72,7 +72,7 @@ if (( bundle )); then
   tar -tzf "$archive" > "$work/entries"
   awk '
     /(^\/|(^|\/)\.\.?($|\/))/ { exit 1 }
-    !/^(manifest\.json|index-checksums\.json|serving-catalog\.ndjson(\.gz)?|index\/index_meta\.json|index\/store\/[A-Za-z0-9_.-]+)$/ { exit 1 }
+    !/^(manifest\.json|index-checksums\.json|serving-catalog\.ndjson|index\/index_meta\.json|index\/store\/[A-Za-z0-9_.-]+)$/ { exit 1 }
   ' "$work/entries"
   tar -tvzf "$archive" > "$work/types"
   awk 'substr($0,1,1) != "-" { exit 1 }' "$work/types"

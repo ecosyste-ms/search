@@ -156,16 +156,7 @@ func makeEntityCard(p *PublicProject) *entityCard {
 }
 
 func (e *Engine) PublicProject(ordinal uint32) (*PublicProject, error) {
-	if e.Compact == nil {
-		return nil, nil
-	}
 	card := e.Compact.Cards[ordinal]
-	if card.Public != nil {
-		return card.Public, nil
-	}
-	if card.Entity == nil || e.Compact.File == nil {
-		return nil, nil
-	}
 	body := make([]byte, card.Length)
 	if _, err := e.Compact.File.ReadAt(body, card.Offset); err != nil {
 		return nil, err
@@ -178,18 +169,12 @@ func (e *Engine) PublicProject(ordinal uint32) (*PublicProject, error) {
 }
 
 func (e *Engine) AttachIdentities(hits []Hit) {
-	if e.Compact == nil {
-		return
-	}
 	for i := range hits {
 		ordinal, err := e.Ordinal(hits[i].ID)
 		if err != nil {
 			continue
 		}
 		card := e.Compact.Cards[ordinal].Entity
-		if card == nil {
-			continue
-		}
 		identity := &PublicIdentity{Packages: card.Count}
 		ecosystems := []string{}
 		for _, value := range e.Catalog.Values[0][e.Catalog.Rows[ordinal][0]] {
